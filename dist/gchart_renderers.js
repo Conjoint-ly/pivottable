@@ -90,6 +90,7 @@
               if (agg.value() != null) {
                 val = agg.value();
                 if ($.isNumeric(val)) {
+                  val = Number(val);
                   if (val < 1) {
                     row.push(parseFloat(val.toPrecision(3)));
                   } else {
