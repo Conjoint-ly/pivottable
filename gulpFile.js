@@ -3,7 +3,6 @@ var gulp = require('gulp'),
     bump = require('gulp-bump'),
     filter = require('gulp-filter'),
     tag_version = require('gulp-tag-version'),
-    runSequence = require('run-sequence').use(gulp),
     spawn = require('child_process').spawn,
     coffee = require('gulp-coffee'),
     gutil = require('gulp-util'),
@@ -15,7 +14,7 @@ var gulp = require('gulp'),
     serve = require('gulp-serve');
 
 gulp.task('makeCss', function() {
-    gulp.src('./dist/pivot.css')
+    return gulp.src('./dist/pivot.css')
         .pipe(minifyCSS())
         .pipe(concat('pivot.min.css'))//trick to output to new file
         .pipe(gulp.dest('./dist/'))
@@ -24,7 +23,7 @@ gulp.task('makeCss', function() {
 
 gulp.task('makeJs', function() {
 
-    gulp.src(['./src/*.coffee', './locales/*.coffee', './tests/*.coffee'])
+    return gulp.src(['./src/*.coffee', './locales/*.coffee', './tests/*.coffee'])
         //compile to js (and create map files)
         .pipe(sourcemaps.init())
         .pipe(coffee()).on('error', gutil.log)
@@ -46,7 +45,7 @@ gulp.task('makeJs', function() {
 
 function inc(importance) {
     // get all the files to bump version in
-    return gulp.src(['./package.json', './bower.json', './pivottable.jquery.json'])
+    return gulp.src(['./package.json', './bower.json'])
         // bump the version number in those files
         .pipe(bump({type: importance}))
         // save it back to filesystem
@@ -58,14 +57,14 @@ function inc(importance) {
 // });
 
 gulp.task('push', function (done) {
-  git.push('origin', 'master', {args: '--tags'}, function (err) {
+  return git.push('origin', 'master', {args: '--tags'}, function (err) {
     if (err) throw err;
   });
 });
 
 
 gulp.task('tag', function() {
-    return gulp.src(['./package.json', './bower.json', './pivottable.jquery.json'])
+    return gulp.src(['./package.json', './bower.json'])
     .pipe(git.commit('version bump'))
     // read only one file to get the version number
     .pipe(filter('package.json'))
@@ -78,13 +77,13 @@ gulp.task('bumpMinor', function() { return inc('minor'); })
 gulp.task('bumpMajor', function() { return inc('major'); })
 
 gulp.task('patch', function() {
-    runSequence('bumpPatch', 'default', 'tag', 'push');
+    return gulp.series('bumpPatch', 'default', 'tag', 'push');
 });
 gulp.task('minor', function() {
-    runSequence('bumpMinor', 'default', 'tag', 'push');
+    return gulp.series('bumpMinor', 'default', 'tag', 'push');
 });
 gulp.task('major', function() {
-    runSequence('bumpMajor', 'default', 'tag', 'push');
+    return gulp.series('bumpMajor', 'default', 'tag', 'push');
 });
 
 gulp.task('serve', serve('.'));
@@ -94,5 +93,5 @@ gulp.task('watch', function() {
   gulp.watch('./dist/pivot.css', ['makeCss']);
 });
 
-gulp.task('default', ['makeJs', 'makeCss']);
+gulp.task('default', gulp.series('makeJs', 'makeCss'));
 
