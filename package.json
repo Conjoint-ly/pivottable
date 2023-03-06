@@ -37,7 +37,7 @@
     "gulp-sourcemaps": "^1.2.8",
     "gulp-serve": "^1.2.0",
     "gulp": "^4.0.2",
-    "run-sequence": "^1.0.2",
+    "run-sequence": "^2.2.1",
     "gulp-tag-version": "^1.2.1",
     "gulp-git": "^0.5.5",
     "gulp-bump": "^3.2.0",
