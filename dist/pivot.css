@@ -7,6 +7,51 @@
 	padding: 1px;
 }
 
+/* Async loading styles */
+.pvt-loading {
+	text-align: center;
+	padding: 20px;
+	color: #666;
+	font-style: italic;
+}
+
+.pvt-loading i {
+	font-size: 1.5em;
+	margin-bottom: 10px;
+}
+
+.pvt-progress {
+	margin: 10px 0;
+	background-color: #f5f5f5;
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.pvt-progress-bar {
+	height: 20px;
+	background-color: #5cb85c;
+	transition: width 0.3s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: white;
+	font-size: 12px;
+}
+
+.pvt-abort-btn {
+	margin-top: 10px;
+	padding: 5px 15px;
+	background-color: #d9534f;
+	color: white;
+	border: none;
+	border-radius: 3px;
+	cursor: pointer;
+}
+
+.pvt-abort-btn:hover {
+	background-color: #c9302c;
+}
+
 .pvtUi {
 	width: 100%;
 	color: #333;

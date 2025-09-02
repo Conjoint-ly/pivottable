@@ -177,7 +177,7 @@ callWithJQuery ($) ->
         "Count as Fraction of Columns": tpl.fractionOf(tpl.count(), "col",   usFmtPct)
 
     renderers =
-        "Table":          (data, opts) ->   pivotTableRenderer(data, opts)
+        "Table":          (data, opts) ->   pivotTableRendererVirtualized(data, opts)
         "Table Barchart": (data, opts) -> $(pivotTableRenderer(data, opts)).barchart()
         "Heatmap":        (data, opts) -> $(pivotTableRenderer(data, opts)).heatmap("heatmap",    opts)
         "Row Heatmap":    (data, opts) -> $(pivotTableRenderer(data, opts)).heatmap("rowheatmap", opts)
@@ -321,9 +321,22 @@ callWithJQuery ($) ->
             @allTotal = @aggregator(this, [], [])
             @sorted = false
 
+            # Async options
+            @asyncMode = opts.asyncMode ? false
+            @lifecycleCallback = opts.lifecycleCallback ? null
+            @progressInterval = opts.progressInterval ? 1000
+            @aborted = false
+            @startTime = null
+            @processedRecords = 0
+            @totalRecords = 0
+            @dataReady = !@asyncMode  # true for sync, false for async until processing completes
+
             # iterate through input, accumulating data for cells
-            PivotData.forEachRecord @input, @derivedAttributes, (record) =>
-                @processRecord(record) if @filter(record)
+            if @asyncMode
+                @processDataAsync()
+            else
+                PivotData.forEachRecord @input, @derivedAttributes, (record) =>
+                    @processRecord(record) if @filter(record)
 
         #can handle arrays or jQuery selections of tables
         @forEachRecord = (input, derivedAttributes, f) ->
@@ -433,9 +446,412 @@ callWithJQuery ($) ->
                 agg = @tree[flatRowKey][flatColKey]
             return agg ? {value: (-> null), format: -> ""}
 
+        # Async data processing methods
+        abort: =>
+            @aborted = true
+
+        callLifecycleCallback: (stage) =>
+            return unless @lifecycleCallback?
+
+            elapsedTime = if @startTime then Date.now() - @startTime else 0
+            progress = if @totalRecords > 0 then Math.round((@processedRecords / @totalRecords) * 100) else 0
+
+            metadata = {
+                stage: stage
+                progress: progress
+                elapsedTime: elapsedTime
+                totalRows: @totalRecords
+                currentIndex: @processedRecords
+            }
+
+            abortFn = null
+            if stage in ['data-started', 'data-progress']
+                abortFn = => @abort()
+
+            toggleVirtualizationFn = null
+
+            @lifecycleCallback(metadata, abortFn, toggleVirtualizationFn)
+
+        countTotalRecords: =>
+            count = 0
+            PivotData.forEachRecord @input, @derivedAttributes, (record) =>
+                count++ if @filter(record)
+            @totalRecords = count
+
+        processDataAsync: =>
+            @startTime = Date.now()
+            @aborted = false
+
+            # First count total records for progress tracking
+            setTimeout =>
+                @countTotalRecords()
+                @callLifecycleCallback('data-started')
+                @processRecordsAsync()
+            , 0
+
+        processRecordsAsync: =>
+            records = []
+
+            # Collect all records first
+            PivotData.forEachRecord @input, @derivedAttributes, (record) =>
+                records.push(record) if @filter(record)
+
+            @totalRecords = records.length  # Set total records here
+            @processRecordsBatch(records, 0)
+
+        processRecordsBatch: (records, startIndex) =>
+            return if @aborted
+
+            batchSize = Math.min(@progressInterval, records.length - startIndex)
+            endIndex = startIndex + batchSize
+
+            # Process batch
+            for i in [startIndex...endIndex]
+                record = records[i]
+                @processRecord(record)
+                @processedRecords++
+                @callLifecycleCallback('data-progress')
+
+            if endIndex < records.length
+                # Continue with next batch
+                setTimeout =>
+                    @processRecordsBatch(records, endIndex)
+                , 0
+            else
+                # Processing complete
+                @dataReady = true  # Add flag to indicate data is ready
+                @callLifecycleCallback('data-completed')
+
     #expose these to the outside world
     $.pivotUtilities = {aggregatorTemplates, aggregators, renderers, derivers, locales,
-        naturalSort, numberFormat, sortAs, PivotData}
+        naturalSort, numberFormat, sortAs, PivotData, pivotTableRendererVirtualized, pivotTableRendererAsync}
+
+    ###
+    Async Pivot Table renderer with progress callbacks
+    ###
+
+    pivotTableRendererAsync = (pivotData, opts) ->
+        startTime = Date.now()
+        aborted = false
+
+        return new Promise (resolve, reject) ->
+            try
+                defaults =
+                    table:
+                        clickCallback: null
+                        rowTotals: true
+                        colTotals: true
+                        renderChunkSize: 100  # Размер чанка для рендеринга строк
+                        virtualization:
+                            enabled: true
+                            rowHeight: 30
+                            bufferSize: 5
+                            containerHeight: 400
+                            headerHeight: 60
+                            threshold: 1000  # Использовать виртуализацию для таблиц больше 1000 строк
+                    localeStrings: totals: "Totals"
+                    lifecycleCallback: null
+
+                opts = $.extend(true, {}, defaults, opts)
+
+                callLifecycle = (stage, progress = 0, metadata = null) ->
+                    return unless opts.lifecycleCallback?
+
+                    data = {
+                        stage: stage
+                        progress: progress
+                        elapsedTime: Date.now() - startTime
+                        totalRows: metadata?.totalRows
+                        totalCols: metadata?.totalCols
+                        isVirtualized: metadata?.isVirtualized
+                        domElements: metadata?.domElements
+                        currentIndex: metadata?.currentIndex
+                        endIndex: metadata?.endIndex
+                    }
+
+                    abortFn = null
+                    if stage in ['render-started', 'render-progress']
+                        abortFn = -> aborted = true
+
+                    toggleVirtualizationFn = null
+                    if stage in ['render-started']
+                        toggleVirtualizationFn = (enabled) ->
+                            opts.table = opts.table ? {}
+                            opts.table.virtualization = opts.table.virtualization ? {}
+                            opts.table.virtualization.enabled = enabled
+
+                    lifecycleCallback(data, abortFn, toggleVirtualizationFn)
+
+                # Проверяем, нужна ли виртуализация
+                totalRows = pivotData.getRowKeys().length
+                shouldVirtualize = opts.table.virtualization.enabled and
+                                 totalRows > opts.table.virtualization.threshold
+
+                callLifecycle('render-started', 0, {
+                    totalRows: totalRows
+                    totalCols: pivotData.getColKeys().length,
+                    isVirtualized: shouldVirtualize
+                })
+
+                return resolve($("<div>").text("Rendering aborted by user")) if aborted
+
+                if shouldVirtualize
+                    callLifecycle('render-progress', 0)
+                    result = pivotTableRendererVirtualized(pivotData, opts)
+                    callLifecycle('render-completed', 100, {
+                        totalRows: pivotData.getRowKeys().length
+                        totalCols: pivotData.getColKeys().length
+                        isVirtualized: true
+                        domElements: result.querySelectorAll('*').length
+                    })
+                    resolve(result)
+                    return
+
+                colAttrs = pivotData.colAttrs
+                rowAttrs = pivotData.rowAttrs
+                rowKeys = pivotData.getRowKeys()
+                colKeys = pivotData.getColKeys()
+
+                if opts.table.clickCallback
+                    getClickHandler = (value, rowValues, colValues) ->
+                        filters = {}
+                        filters[attr] = colValues[i] for own i, attr of colAttrs when colValues[i]?
+                        filters[attr] = rowValues[i] for own i, attr of rowAttrs when rowValues[i]?
+                        return (e) -> opts.table.clickCallback(e, value, filters, pivotData)
+
+                precomputeSpans = (arr) ->
+                    spans = []
+                    for i in [0...arr.length]
+                        spans[i] = []
+                        for j in [0...arr[i].length]
+                            spans[i][j] = spanSize(arr, i, j)
+                    return spans
+
+                #helper function for setting row/col-span in pivotTableRenderer
+                spanSize = (arr, i, j) ->
+                    if i != 0
+                        noDraw = true
+                        for x in [0..j]
+                            if arr[i-1][x] != arr[i][x]
+                                noDraw = false
+                        if noDraw
+                          return -1 #do not draw cell
+                    len = 0
+                    while i+len < arr.length
+                        stop = false
+                        for x in [0..j]
+                            stop = true if arr[i][x] != arr[i+len][x]
+                        break if stop
+                        len++
+                    return len
+
+                rowSpans = precomputeSpans(rowKeys)
+                colSpans = precomputeSpans(colKeys)
+
+                #now actually build the output
+                result = document.createElement("table")
+                result.className = "pvtTable"
+
+                theadFragment = document.createDocumentFragment()
+
+                #the first few rows are for col headers
+                for own j, c of colAttrs
+                    tr = document.createElement("tr")
+                    if parseInt(j) == 0 and rowAttrs.length != 0
+                        th = document.createElement("th")
+                        th.setAttribute("colspan", rowAttrs.length)
+                        th.setAttribute("rowspan", colAttrs.length)
+                        tr.appendChild th
+                    th = document.createElement("th")
+                    th.className = "pvtAxisLabel"
+                    th.textContent = opts.labels?[c] ? c
+                    tr.appendChild th
+
+                    for own i, colKey of colKeys
+                        x = colSpans[parseInt(i)][parseInt(j)]
+                        if x != -1
+                            th = document.createElement("th")
+                            th.className = "pvtColLabel"
+                            th.textContent = colKey[j]
+                            th.setAttribute("colspan", x)
+                            if parseInt(j) == colAttrs.length-1 and rowAttrs.length != 0
+                                th.setAttribute("rowspan", 2)
+                            tr.appendChild th
+                    if parseInt(j) == 0 && opts.table.rowTotals
+                        th = document.createElement("th")
+                        th.className = "pvtTotalLabel pvtRowTotalLabel"
+                        th.innerHTML = opts.localeStrings.totals
+                        th.setAttribute("rowspan", colAttrs.length + (if rowAttrs.length == 0 then 0 else 1))
+                        tr.appendChild th
+                    theadFragment.appendChild tr
+
+                thead = document.createElement("thead")
+                thead.appendChild(theadFragment)
+
+                #then a row for row header headers
+                if rowAttrs.length !=0
+                    tr = document.createElement("tr")
+                    for own i, r of rowAttrs
+                        th = document.createElement("th")
+                        th.className = "pvtAxisLabel"
+                        th.textContent = opts.labels[r] ? r
+                        tr.appendChild th
+                    th = document.createElement("th")
+                    if colAttrs.length ==0
+                        th.className = "pvtTotalLabel pvtRowTotalLabel"
+                        th.innerHTML = opts.localeStrings.totals
+                    tr.appendChild th
+                    thead.appendChild tr
+                result.appendChild thead
+
+                callLifecycle('render-progress', 1)
+                return resolve($("<div>").text("Rendering aborted by user")) if aborted
+
+                # Async processing of data rows
+                tbody = document.createElement("tbody")
+                totalRows = rowKeys.length
+                currentIndex = 0
+
+                createDataRow = (i, rowKey) ->
+                    tr = document.createElement("tr")
+
+                    for own j, txt of rowKey
+                        x = rowSpans[parseInt(i)][parseInt(j)]
+                        if x != -1
+                            th = document.createElement("th")
+                            th.className = "pvtRowLabel"
+                            th.textContent = txt
+                            th.setAttribute("rowspan", x)
+                            if parseInt(j) == rowAttrs.length-1 and colAttrs.length != 0
+                                th.setAttribute("colspan", 2)
+                            tr.appendChild th
+
+                    for own j, colKey of colKeys
+                        aggregator = pivotData.getAggregator(rowKey, colKey)
+                        val = aggregator.value()
+                        td = document.createElement("td")
+                        td.className = "pvtVal row#{i} col#{j}"
+                        td.textContent = aggregator.format(val)
+                        td.setAttribute("data-value", val)
+                        if getClickHandler?
+                            td.onclick = getClickHandler(val, rowKey, colKey)
+                        tr.appendChild td
+
+                    if opts.table.rowTotals || colAttrs.length == 0
+                        totalAggregator = pivotData.getAggregator(rowKey, [])
+                        val = totalAggregator.value()
+                        td = document.createElement("td")
+                        td.className = "pvtTotal rowTotal"
+                        td.textContent = totalAggregator.format(val)
+                        td.setAttribute("data-value", val)
+                        if getClickHandler?
+                            td.onclick = getClickHandler(val, rowKey, [])
+                        td.setAttribute("data-for", "row#{i}")
+                        tr.appendChild td
+
+                    return tr
+
+                processRowsBatch = ->
+                    return if currentIndex >= totalRows or aborted
+
+                    batchSize = Math.min(opts.table.renderChunkSize, totalRows - currentIndex)
+                    endIndex = currentIndex + batchSize
+
+                    fragment = document.createDocumentFragment()
+                    for i in [currentIndex...endIndex]
+                        rowKey = rowKeys[i]
+                        tr = createDataRow(i, rowKey)
+                        fragment.appendChild tr
+
+                    tbody.appendChild(fragment)
+
+                    progress = 1 + Math.round((endIndex / totalRows) * 98)
+                    callLifecycle('render-progress', progress, {
+                        currentIndex: currentIndex,
+                        endIndex: endIndex,
+                        totalRows: totalRows
+                    })
+
+                    return if aborted
+
+                    currentIndex = endIndex
+
+                    if currentIndex >= totalRows
+                        finishRendering()
+                    else
+                        if window.requestAnimationFrame?
+                            requestAnimationFrame(processRowsBatch)
+                        else
+                            setTimeout(processRowsBatch, 1)
+
+                finishRendering = ->
+                    callLifecycle('render-progress', 100, {
+                        currentIndex: currentIndex,
+                        endIndex: currentIndex,
+                        totalRows: totalRows
+                    })
+
+                    return if aborted
+
+                    #finally, the row for col totals, and a grand total
+                    if opts.table.colTotals || rowAttrs.length == 0
+                        tr = document.createElement("tr")
+
+                        if opts.table.colTotals || rowAttrs.length == 0
+                            th = document.createElement("th")
+                            th.className = "pvtTotalLabel pvtColTotalLabel"
+                            th.innerHTML = opts.localeStrings.totals
+                            th.setAttribute("colspan", rowAttrs.length + (if colAttrs.length == 0 then 0 else 1))
+                            tr.appendChild th
+
+                        totalsFragment = document.createDocumentFragment()
+
+                        for own j, colKey of colKeys
+                            totalAggregator = pivotData.getAggregator([], colKey)
+                            val = totalAggregator.value()
+                            td = document.createElement("td")
+                            td.className = "pvtTotal colTotal"
+                            td.textContent = totalAggregator.format(val)
+                            td.setAttribute("data-value", val)
+                            if getClickHandler?
+                                td.onclick = getClickHandler(val, [], colKey)
+                            td.setAttribute("data-for", "col"+j)
+                            totalsFragment.appendChild(td)
+
+                        tr.appendChild(totalsFragment)
+
+                        if opts.table.rowTotals || colAttrs.length == 0
+                            totalAggregator = pivotData.getAggregator([], [])
+                            val = totalAggregator.value()
+                            td = document.createElement("td")
+                            td.className = "pvtGrandTotal"
+                            td.textContent = totalAggregator.format(val)
+                            td.setAttribute("data-value", val)
+                            if getClickHandler?
+                                td.onclick = getClickHandler(val, [], [])
+                            tr.appendChild td
+
+                        tbody.appendChild(tr)
+
+                    result.appendChild(tbody)
+
+                    callLifecycle('render-completed', 100, {
+                        totalRows: rowKeys.length
+                        totalCols: colKeys.length
+                        isVirtualized: false
+                        domElements: result.querySelectorAll('*').length
+                    })
+                    resolve(result)
+
+                # Начинаем обработку строк
+                if totalRows > 0
+                    processRowsBatch()
+                else
+                    finishRendering()
+
+            catch error
+                console.error("Error during async rendering:", error)
+                reject(error)
 
     ###
     Default Renderer for hierarchical table layout
@@ -449,8 +865,39 @@ callWithJQuery ($) ->
                 rowTotals: true
                 colTotals: true
             localeStrings: totals: "Totals"
+            lifecycleCallback: null
 
         opts = $.extend(true, {}, defaults, opts)
+
+        aborted = false
+        startTime = Date.now()
+
+        callLifecycle = (stage, progress = 0, metadata = null) ->
+            return unless opts.lifecycleCallback?
+
+            data = {
+                stage: stage
+                progress: progress
+                elapsedTime: Date.now() - startTime
+                totalRows: metadata?.totalRows
+                totalCols: metadata?.totalCols
+                isVirtualized: false
+                domElements: metadata?.domElements
+                currentIndex: metadata?.currentIndex
+                endIndex: metadata?.endIndex
+            }
+            # totalRows: pivotData.getRowKeys().length
+            # totalCols: pivotData.getColKeys().length
+
+            abortFn = null
+            toggleVirtualizationFn = null
+            if stage in ['render-started', 'render-progress']
+                abortFn = -> aborted = true
+
+            opts.lifecycleCallback(data, abortFn, toggleVirtualizationFn)
+
+        callLifecycle('render-started')
+        return $("<div>").text("Rendering aborted by user") if aborted
 
         colAttrs = pivotData.colAttrs
         rowAttrs = pivotData.rowAttrs
@@ -604,9 +1051,11 @@ callWithJQuery ($) ->
             tbody.appendChild tr
         result.appendChild tbody
 
-        #squirrel this away for later
-        result.setAttribute("data-numrows", rowKeys.length)
-        result.setAttribute("data-numcols", colKeys.length)
+        callLifecycle('render-completed', 100, {
+            totalRows: rowKeys.length
+            totalCols: colKeys.length
+            domElements: result.querySelectorAll('*').length
+        })
 
         return result
 
@@ -627,33 +1076,130 @@ callWithJQuery ($) ->
             labels: {}
             derivedAttributes: {}
             renderer: pivotTableRenderer
+            asyncMode: false
+            lifecycleCallback: null
+            progressInterval: 1000
+            renderChunkSize: 25
 
         localeStrings = $.extend(true, {}, locales.en.localeStrings, locales[locale].localeStrings)
         localeDefaults =
             rendererOptions: {
                 localeSettings: localeStrings,
-                labels: inputOpts.labels ? {}
+                labels: inputOpts.labels ? {},
+                table: {
+                    renderChunkSize: inputOpts.renderChunkSize ? 25
+                },
+                lifecycleCallback: inputOpts?.lifecycleCallback
             }
             localeStrings: localeStrings
 
         opts = $.extend(true, {}, localeDefaults, $.extend({}, defaults, inputOpts))
 
-        result = null
-        try
-            pivotData = new opts.dataClass(input, opts)
+        x = this[0]
+
+        if opts.asyncMode
+            # Async mode - return promise
+            return new Promise (resolve, reject) =>
+                x.removeChild(x.lastChild) while x.hasChildNodes()
+
+                # Show loading indicator
+                loadingDiv = document.createElement("div")
+                loadingDiv.className = "pvt-loading"
+                loadingDiv.innerHTML = "Processing data..."
+                x.appendChild(loadingDiv)
+
+                try
+                    pivotData = new opts.dataClass(input, opts)
+
+                    # Store instance for abort functionality
+                    x.pivotDataInstance = pivotData
+
+                    # Wait for async data processing to complete
+                    checkDataReady = =>
+                        if pivotData.dataReady or pivotData.aborted
+                            if pivotData.aborted
+                                reject(new Error("Processing aborted"))
+                                return
+
+                            try
+                                # Check if this is a table renderer
+                                # Can be: direct function reference, string "Table", or resolved function from renderers dict
+                                rendererFunction = opts.renderer
+                                rendererName = null
+
+                                # If renderer is a string, resolve it to function
+                                if typeof opts.renderer == "string"
+                                    rendererName = opts.renderer
+                                    rendererFunction = opts.renderers?[opts.renderer] or renderers[opts.renderer]
+                                else if $.isFunction(opts.renderer)
+                                    # Try to find the renderer name by comparing functions
+                                    for name, func of (opts.renderers or renderers)
+                                        if func == opts.renderer
+                                            rendererName = name
+                                            break
+
+                                # Check if this is a table renderer
+                                isTableRenderer = (rendererFunction == pivotTableRenderer) or
+                                                 (rendererName == "Table") or
+                                                 ($.isFunction(rendererFunction) and rendererFunction.toString().indexOf("pivotTableRenderer") > -1)
+
+                                if isTableRenderer
+                                    # Use async renderer for table
+                                    pivotTableRendererAsync(pivotData, opts.rendererOptions)
+                                        .then (result) =>
+                                            x.removeChild(x.lastChild) while x.hasChildNodes()
+                                            x.appendChild(result)
+                                            resolve(result)
+                                        .catch (error) =>
+                                            reject(error)
+                                else
+                                    # Use regular renderer but wrapped in async chunks
+                                    setTimeout =>
+                                        try
+                                            # Break sync renderer into chunks too
+                                            renderSyncInChunks = ->
+                                                setTimeout =>
+                                                    try
+                                                        result = opts.renderer(pivotData, opts.rendererOptions)
+                                                        x.removeChild(x.lastChild) while x.hasChildNodes()
+                                                        x.appendChild(result)
+                                                        resolve(result)
+                                                    catch error
+                                                        reject(error)
+                                                , 1 # Small delay to allow UI updates
+
+                                            renderSyncInChunks()
+                                        catch error
+                                            reject(error)
+                                    , 1
+                            catch e
+                                console.error(e.stack) if console?
+                                reject(e)
+                        else
+                            setTimeout(checkDataReady, 100)
+
+                    checkDataReady()
+
+                catch e
+                    console.error(e.stack) if console?
+                    reject(e)
+        else
+            # Sync mode - original behavior
+            result = null
             try
-                result = opts.renderer(pivotData, opts.rendererOptions)
+                pivotData = new opts.dataClass(input, opts)
+                try
+                    result = opts.renderer(pivotData, opts.rendererOptions)
+                catch e
+                    console.error(e.stack) if console?
+                    result = $("<span>").html opts.localeStrings.renderError
             catch e
                 console.error(e.stack) if console?
-                result = $("<span>").html opts.localeStrings.renderError
-        catch e
-            console.error(e.stack) if console?
-            result = $("<span>").html opts.localeStrings.computeError
+                result = $("<span>").html opts.localeStrings.computeError
 
-        x = this[0]
-        x.removeChild(x.lastChild) while x.hasChildNodes()
-
-        return result
+            x.removeChild(x.lastChild) while x.hasChildNodes()
+            x.appendChild(result) if result
+            return this
 
 
     ###
@@ -678,6 +1224,7 @@ callWithJQuery ($) ->
             unusedAttrsVertical: 85
             autoSortUnusedAttrs: false
             onRefresh: null
+            complexityCallback: null #callback to check if computation should proceed based on complexity heuristics
             showUI: true
             labels: {}
             controls: {
@@ -686,10 +1233,19 @@ callWithJQuery ($) ->
             }
             filter: -> true
             sorters: {}
+            asyncMode: false
+            lifecycleCallback: null
+            progressInterval: 1000
+            renderChunkSize: 25
 
         localeStrings = $.extend(true, {}, locales.en.localeStrings, locales[locale].localeStrings)
         localeDefaults =
-            rendererOptions: {localeStrings}
+            rendererOptions: {
+                localeStrings,
+                table: {
+                    renderChunkSize: inputOpts.renderChunkSize ? 25
+                }
+            }
             localeStrings: localeStrings
 
         existingOpts = @data "pivotUIOptions"
@@ -871,7 +1427,7 @@ callWithJQuery ($) ->
                                 top = targetOffset.top - UIOffset.top - valueListHeight / 2
                             else
                                 top = targetOffset.top - UIOffset.top - valueListHeight
-                                
+
                             $(".pvtFilterBox").hide()
                             valueList.css(left: targetOffset.left - UIOffset.left + 10, top: top + 10).show()
 
@@ -930,7 +1486,7 @@ callWithJQuery ($) ->
                     else
                         pvtVals.attr("colspan", 2)
             unusedVisibility.addClass("active") if opts.controls.unused
-                        
+
             rulesVisibility = $("<button>", class: "btn btn-default btn-xs")
                 .append($("<i>", class: "far fa-fw fa-ruler-combined fa-flip-vertical"))
                 .bind "click", ->
@@ -942,9 +1498,21 @@ callWithJQuery ($) ->
                 .append(unusedVisibility)
                 .append(rulesVisibility)
 
+            # Create refresh button (initially hidden)
+            refreshButton = $("<button>", class: "btn btn-default btn-xs pvtRefreshBtn", style: "display: none;")
+                .append($("<i>", class: "fas fa-fw fa-sync-alt"))
+                .attr("title", "Refresh calculation")
+                .bind "click", ->
+                    $(this).hide()
+                    refresh(false, true) # force refresh
+
+            refreshGroup = $("<div>", class: "btn-group", role: "group")
+                .append(refreshButton)
+
             controlsToolbar = $("<div>", class: "btn-toolbar")
                 .append(panelsGroup)
                 .append(orderGroup)
+                .append(refreshGroup)
 
             $("<td>", class: "pvtVals pvtUiCell")
               .appendTo(tr1)
@@ -974,7 +1542,7 @@ callWithJQuery ($) ->
             visible = $("<div>", class: "pvtVisible")
             responsive = $("<div>", class: "pvtResponsive").appendTo(visible)
             uiTable.appendTo(responsive)
-            
+
             @html visible
 
             $(".pvtRows, .pvtCols").hide() if !opts.controls.rules
@@ -997,7 +1565,47 @@ callWithJQuery ($) ->
             initialRender = true
 
             #set up for refreshing
-            refreshDelayed = (first) =>
+            # Function to calculate complexity heuristics
+            calculateComplexity = (subopts) =>
+                # Count unique values for each attribute
+                uniqueValues = {}
+                totalRecords = 0
+
+                # Count records and unique values
+                PivotData.forEachRecord materializedInput, subopts.derivedAttributes, (record) =>
+                    return if not subopts.filter(record)
+                    totalRecords++
+
+                    # Count unique values for row attributes
+                    for attr in subopts.rows
+                        uniqueValues[attr] ?= new Set()
+                        uniqueValues[attr].add(record[attr] ? "null")
+
+                    # Count unique values for column attributes
+                    for attr in subopts.cols
+                        uniqueValues[attr] ?= new Set()
+                        uniqueValues[attr].add(record[attr] ? "null")
+
+                # Calculate estimated dimensions
+                estimatedRows = 1
+                for attr in subopts.rows
+                    estimatedRows *= (uniqueValues[attr]?.size || 1)
+
+                estimatedCols = 1
+                for attr in subopts.cols
+                    estimatedCols *= (uniqueValues[attr]?.size || 1)
+
+                # Calculate complexity score (rough estimate)
+                complexityScore = estimatedRows * estimatedCols
+
+                return {
+                    totalRecords: totalRecords
+                    estimatedRows: estimatedRows
+                    estimatedCols: estimatedCols
+                    complexityScore: complexityScore
+                }
+
+            refreshDelayed = (first, forceRefresh = false) =>
                 subopts =
                     derivedAttributes: opts.derivedAttributes
                     localeStrings: opts.localeStrings
@@ -1072,44 +1680,120 @@ callWithJQuery ($) ->
                         return false if ""+(record[k] ? 'null') in excludedItems
                     return true
 
-                if (["Line Chart", "Bar Chart", "Stacked Bar Chart", "Area Chart", "Scatter Chart", "Pie Chart"].indexOf(renderer.val()) > -1)
-                    {result, wrapper} = pivotTable.pivot(materializedInput, subopts);
-                    pivotTable.append(result)
-                    wrapper.draw(result[0])
+                # Check complexity before proceeding with calculation
+                shouldProceed = true
+                if opts.complexityCallback?
+                    complexity = calculateComplexity(subopts)
+                    # Add forced parameter to callback if this is a forced refresh
+                    if forceRefresh
+                        # For forced refresh, pass an additional parameter indicating it's forced
+                        shouldProceed = opts.complexityCallback(complexity, true)
+                    else
+                        shouldProceed = opts.complexityCallback(complexity)
+
+                if not shouldProceed
+                    # Show refresh button and display message
+                    @find(".pvtRefreshBtn").show()
+                    pivotTable.html("<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>Calculation skipped due to complexity.<br>Click refresh button to force calculation.</div>")
+                    pivotTable.css("opacity", 1)
+                    return
+
+                # Hide refresh button if calculation proceeds
+                @find(".pvtRefreshBtn").hide()
+
+                # Add async support to subopts
+                subopts.asyncMode = opts.asyncMode
+                subopts.progressInterval = opts.progressInterval
+                subopts.lifecycleCallback = opts.lifecycleCallback
+
+                if opts.asyncMode
+                    # Show loading indicator
+                    pivotTable.html("<div class='pvt-loading' style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-spinner fa-spin'></i><br>Processing data...</div>")
+
+                    # Store pivot data instance for abort functionality
+                    @[0].pivotDataInstance = null
+
+                    pivotPromise = if (["Line Chart", "Bar Chart", "Stacked Bar Chart", "Area Chart", "Scatter Chart", "Pie Chart"].indexOf(renderer.val()) > -1)
+                        {result, wrapper} = pivotTable.pivot(materializedInput, subopts)
+                        result.then (tableResult) ->
+                            wrapper.draw(tableResult)
+                            return tableResult
+                    else
+                        pivotTable.pivot(materializedInput, subopts)
+
+                    if pivotPromise?.then?
+                        pivotPromise
+                            .then (result) =>
+                                @[0].pivotDataInstance = null
+                                pivotTable.empty().append(result)
+
+                                pivotUIOptions = $.extend {}, opts,
+                                    cols: subopts.cols
+                                    rows: subopts.rows
+                                    colOrder: subopts.colOrder
+                                    rowOrder: subopts.rowOrder
+                                    vals: vals
+                                    exclusions: exclusions
+                                    inclusions: inclusions
+                                    inclusionsInfo: inclusions #duplicated for backwards-compatibility
+                                    aggregatorName: aggregator.val()
+                                    rendererName: renderer.val()
+
+                                @data "pivotUIOptions", pivotUIOptions
+
+                                # if requested make sure unused columns are in alphabetical order
+                                if opts.autoSortUnusedAttrs
+                                    unusedAttrsContainer = @find("td.pvtUnused.pvtAxisContainer")
+                                    $(unusedAttrsContainer).children("li")
+                                        .sort((a, b) => naturalSort($(a).text(), $(b).text()))
+                                        .appendTo unusedAttrsContainer
+
+                                pivotTable.css("opacity", 1)
+                                opts.onRefresh(pivotUIOptions) if opts.onRefresh? and !first?
+                            .catch (error) =>
+                                @[0].pivotDataInstance = null
+                                console.error("Pivot table error:", error)
+                                pivotTable.html("<div style='text-align: center; padding: 20px; color: #d9534f;'><i class='fas fa-exclamation-triangle'></i><br>Error processing data:<br>#{error.message}</div>")
+                                pivotTable.css("opacity", 1)
                 else
-                    pivotTable.append(pivotTable.pivot(materializedInput, subopts));
+                    # Synchronous mode - original behavior
+                    if (["Line Chart", "Bar Chart", "Stacked Bar Chart", "Area Chart", "Scatter Chart", "Pie Chart"].indexOf(renderer.val()) > -1)
+                        {result, wrapper} = pivotTable.pivot(materializedInput, subopts);
+                        pivotTable.append(result)
+                        wrapper.draw(result[0])
+                    else
+                        pivotTable.append(pivotTable.pivot(materializedInput, subopts));
 
+                    pivotUIOptions = $.extend {}, opts,
+                        cols: subopts.cols
+                        rows: subopts.rows
+                        colOrder: subopts.colOrder
+                        rowOrder: subopts.rowOrder
+                        vals: vals
+                        exclusions: exclusions
+                        inclusions: inclusions
+                        inclusionsInfo: inclusions #duplicated for backwards-compatibility
+                        aggregatorName: aggregator.val()
+                        rendererName: renderer.val()
 
-                pivotUIOptions = $.extend {}, opts,
-                    cols: subopts.cols
-                    rows: subopts.rows
-                    colOrder: subopts.colOrder
-                    rowOrder: subopts.rowOrder
-                    vals: vals
-                    exclusions: exclusions
-                    inclusions: inclusions
-                    inclusionsInfo: inclusions #duplicated for backwards-compatibility
-                    aggregatorName: aggregator.val()
-                    rendererName: renderer.val()
+                    @data "pivotUIOptions", pivotUIOptions
 
-                @data "pivotUIOptions", pivotUIOptions
+                    # if requested make sure unused columns are in alphabetical order
+                    if opts.autoSortUnusedAttrs
+                        unusedAttrsContainer = @find("td.pvtUnused.pvtAxisContainer")
+                        $(unusedAttrsContainer).children("li")
+                            .sort((a, b) => naturalSort($(a).text(), $(b).text()))
+                            .appendTo unusedAttrsContainer
 
-                # if requested make sure unused columns are in alphabetical order
-                if opts.autoSortUnusedAttrs
-                    unusedAttrsContainer = @find("td.pvtUnused.pvtAxisContainer")
-                    $(unusedAttrsContainer).children("li")
-                        .sort((a, b) => naturalSort($(a).text(), $(b).text()))
-                        .appendTo unusedAttrsContainer
+                    pivotTable.css("opacity", 1)
+                    opts.onRefresh(pivotUIOptions) if opts.onRefresh? and !first?
 
-                pivotTable.css("opacity", 1)
-                opts.onRefresh(pivotUIOptions) if opts.onRefresh? and !first?
-
-            refresh = (first) =>
+            refresh = (first, forceRefresh = false) =>
                 pivotTable.css("opacity", 0.5)
-                setTimeout ( -> refreshDelayed first), 10
+                setTimeout ( -> refreshDelayed first, forceRefresh), 10
 
             #the very first refresh will actually display the table
-            refresh(true)
+            refresh(true, false)
 
             @find(".pvtAxisContainer").sortable
                     update: (e, ui) -> refresh() if not ui.sender?
@@ -1222,3 +1906,383 @@ callWithJQuery ($) ->
         barcharter ".pvtTotal.colTotal"
 
         return this
+
+    ###
+    Virtualized Pivot Table Renderer - оптимизированная версия для больших данных
+    ###
+
+    pivotTableRendererVirtualized = (pivotData, opts) ->
+        defaults =
+            table:
+                clickCallback: null
+                rowTotals: true
+                colTotals: true
+                virtualization:
+                    enabled: true
+                    rowHeight: 30
+                    bufferSize: 5  # количество строк буфера сверху и снизу
+                    containerHeight: 400  # высота контейнера таблицы
+            localeStrings: totals: "Totals"
+            lifecycleCallback: null
+
+        opts = $.extend(true, {}, defaults, opts)
+
+        aborted = false
+        startTime = Date.now()
+
+        callLifecycle = (stage, progress, metadata = null) ->
+            return unless opts.lifecycleCallback?
+
+            data = {
+                stage: stage
+                progress: progress
+                elapsedTime: Date.now() - startTime
+                totalRows: metadata?.totalRows
+                totalCols: metadata?.totalCols
+                isVirtualized: true
+                domElements: metadata?.domElements
+                currentIndex: metadata?.currentIndex
+                endIndex: metadata?.endIndex
+            }
+
+            abortFn = null
+            if stage in ['render-started', 'render-progress']
+                abortFn = -> aborted = true
+
+            toggleVirtualizationFn = null
+            if stage in ['render-started']
+                toggleVirtualizationFn = (enabled) ->
+                    opts.table.virtualization.enabled = enabled
+
+            opts.lifecycleCallback(data, abortFn, toggleVirtualizationFn)
+
+        colAttrs = pivotData.colAttrs
+        rowAttrs = pivotData.rowAttrs
+        rowKeys = pivotData.getRowKeys()
+        colKeys = pivotData.getColKeys()
+
+        totalRows = rowKeys.length
+        callLifecycle('render-started', 0, {
+            totalRows: totalRows
+            totalCols: colKeys.length
+            domElements: 0
+        })
+        return if aborted
+
+        shouldVirtualize = opts.table.virtualization.enabled
+
+        if not shouldVirtualize
+            return pivotTableRenderer(pivotData, opts)
+
+        container = document.createElement("div")
+        container.className = "pvt-virtualized-container"
+        container.style.cssText = """
+            position: relative;
+            height: #{opts.table.virtualization.containerHeight}px;
+            overflow: auto;
+            border: 1px solid #ccc;
+            background: white;
+        """
+
+        mainTable = document.createElement("table")
+        mainTable.className = "pvtTable pvt-virtualized-table"
+        mainTable.style.cssText = """
+            border-collapse: collapse;
+            width: auto;
+            min-width: 100%;
+            table-layout: auto;
+        """
+
+        container.appendChild(mainTable)
+
+        if opts.table.clickCallback
+            getClickHandler = (value, rowValues, colValues) ->
+                filters = {}
+                filters[attr] = colValues[i] for own i, attr of colAttrs when colValues[i]?
+                filters[attr] = rowValues[i] for own i, attr of rowAttrs when rowValues[i]?
+                return (e) -> opts.table.clickCallback(e, value, filters, pivotData)
+
+        spanSize = (arr, i, j) ->
+            if i != 0
+                noDraw = true
+                for x in [0..j]
+                    if arr[i-1][x] != arr[i][x]
+                        noDraw = false
+                if noDraw
+                    return -1
+            len = 0
+            while i+len < arr.length
+                stop = false
+                for x in [0..j]
+                    stop = true if arr[i][x] != arr[i+len][x]
+                break if stop
+                len++
+            return len
+
+        buildHeaders = ->
+            thead = document.createElement("thead")
+
+            for own j, c of colAttrs
+                tr = document.createElement("tr")
+
+                if parseInt(j) == 0 and rowAttrs.length != 0
+                    th = document.createElement("th")
+                    th.setAttribute("colspan", rowAttrs.length)
+                    th.setAttribute("rowspan", colAttrs.length)
+                    th.style.cssText = "background: #f5f5f5; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap;"
+                    tr.appendChild th
+
+                th = document.createElement("th")
+                th.className = "pvtAxisLabel"
+                th.textContent = opts.labels?[c] ? c
+                th.style.cssText = "background: #f5f5f5; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap;"
+                tr.appendChild th
+
+                for own i, colKey of colKeys
+                    x = spanSize(colKeys, parseInt(i), parseInt(j))
+                    if x != -1
+                        th = document.createElement("th")
+                        th.className = "pvtColLabel"
+                        th.textContent = colKey[j]
+                        th.setAttribute("colspan", x)
+                        th.style.cssText = "background: #f0f0f0; border: 1px solid #ccc; padding: 5px; text-align: center; white-space: nowrap; min-width: 80px;"
+                        if parseInt(j) == colAttrs.length-1 and rowAttrs.length != 0
+                            th.setAttribute("rowspan", 2)
+                        tr.appendChild th
+
+                if parseInt(j) == 0 && opts.table.rowTotals
+                    th = document.createElement("th")
+                    th.className = "pvtTotalLabel pvtRowTotalLabel"
+                    th.innerHTML = opts.localeStrings.totals
+                    th.setAttribute("rowspan", colAttrs.length + (if rowAttrs.length == 0 then 0 else 1))
+                    th.style.cssText = "background: #e6e6e6; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap; min-width: 80px;"
+                    tr.appendChild th
+
+                thead.appendChild tr
+
+            if rowAttrs.length != 0
+                tr = document.createElement("tr")
+
+                for own i, r of rowAttrs
+                    th = document.createElement("th")
+                    th.className = "pvtAxisLabel"
+                    th.textContent = opts.labels?[r] ? r
+                    th.style.cssText = "background: #f5f5f5; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap; min-width: 100px;"
+                    tr.appendChild th
+
+                th = document.createElement("th")
+                if colAttrs.length == 0
+                    th.className = "pvtTotalLabel pvtRowTotalLabel"
+                    th.innerHTML = opts.localeStrings.totals
+                th.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: center; white-space: nowrap;"
+                tr.appendChild th
+                thead.appendChild tr
+
+            mainTable.appendChild thead
+
+        createDataRow = (i, rowKey) ->
+            tr = document.createElement("tr")
+            tr.setAttribute("data-row-index", i)
+            tr.style.height = "#{opts.table.virtualization.rowHeight}px"
+
+            for own j, txt of rowKey
+                x = spanSize(rowKeys, parseInt(i), parseInt(j))
+                if x != -1
+                    th = document.createElement("th")
+                    th.className = "pvtRowLabel"
+                    th.textContent = txt
+                    th.setAttribute("rowspan", x)
+                    th.style.cssText = "background: #f8f8f8; border: 1px solid #ccc; padding: 5px; text-align: left; font-weight: normal; white-space: nowrap; min-width: 100px;"
+                    if parseInt(j) == rowAttrs.length-1 and colAttrs.length != 0
+                        th.setAttribute("colspan", 2)
+                    tr.appendChild th
+
+            for own j, colKey of colKeys
+                aggregator = pivotData.getAggregator(rowKey, colKey)
+                val = aggregator.value()
+                td = document.createElement("td")
+                td.className = "pvtVal row#{i} col#{j}"
+                td.textContent = aggregator.format(val)
+                td.setAttribute("data-value", val)
+                td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; color: #3D3D3D; white-space: nowrap; min-width: 80px;"
+                if getClickHandler?
+                    td.onclick = getClickHandler(val, rowKey, colKey)
+                tr.appendChild td
+
+            if opts.table.rowTotals || colAttrs.length == 0
+                totalAggregator = pivotData.getAggregator(rowKey, [])
+                val = totalAggregator.value()
+                td = document.createElement("td")
+                td.className = "pvtTotal rowTotal"
+                td.textContent = totalAggregator.format(val)
+                td.setAttribute("data-value", val)
+                td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; font-weight: bold; background: #f9f9f9; color: #000; white-space: nowrap; min-width: 80px;"
+                if getClickHandler?
+                    td.onclick = getClickHandler(val, rowKey, [])
+                td.setAttribute("data-for", "row#{i}")
+                tr.appendChild td
+
+            return tr
+
+        createTotalsRow = ->
+            return unless opts.table.colTotals || rowAttrs.length == 0
+
+            tr = document.createElement("tr")
+            tr.className = "pvt-totals-row"
+            tr.style.cssText = "background: #f9f9f9; border-top: 2px solid #999; font-weight: bold;"
+
+            if opts.table.colTotals || rowAttrs.length == 0
+                th = document.createElement("th")
+                th.className = "pvtTotalLabel pvtColTotalLabel"
+                th.innerHTML = opts.localeStrings.totals
+                th.setAttribute("colspan", rowAttrs.length + (if colAttrs.length == 0 then 0 else 1))
+                th.style.cssText = "background: #e6e6e6; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap;"
+                tr.appendChild th
+
+            for own j, colKey of colKeys
+                totalAggregator = pivotData.getAggregator([], colKey)
+                val = totalAggregator.value()
+                td = document.createElement("td")
+                td.className = "pvtTotal colTotal"
+                td.textContent = totalAggregator.format(val)
+                td.setAttribute("data-value", val)
+                td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; font-weight: bold; background: #f9f9f9; color: #000; white-space: nowrap; min-width: 80px;"
+                if getClickHandler?
+                    td.onclick = getClickHandler(val, [], colKey)
+                td.setAttribute("data-for", "col"+j)
+                tr.appendChild td
+
+            if opts.table.rowTotals || colAttrs.length == 0
+                totalAggregator = pivotData.getAggregator([], [])
+                val = totalAggregator.value()
+                td = document.createElement("td")
+                td.className = "pvtGrandTotal"
+                td.textContent = totalAggregator.format(val)
+                td.setAttribute("data-value", val)
+                td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; font-weight: bold; background: #e6e6e6; color: #000; white-space: nowrap; min-width: 80px;"
+                if getClickHandler?
+                    td.onclick = getClickHandler(val, [], [])
+                tr.appendChild td
+
+            return tr
+
+        currentStartIndex = 0
+        currentEndIndex = 0
+
+        calculateVisibleRange = ->
+            scrollTop = container.scrollTop
+            containerHeight = opts.table.virtualization.containerHeight
+            rowHeight = opts.table.virtualization.rowHeight
+            bufferSize = opts.table.virtualization.bufferSize
+
+            headerHeight = mainTable.querySelector('thead')?.clientHeight || 0
+            adjustedScrollTop = Math.max(0, scrollTop - headerHeight)
+
+            startIndex = Math.max(0, Math.floor(adjustedScrollTop / rowHeight) - bufferSize)
+            visibleRows = Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize)
+            endIndex = Math.min(totalRows, startIndex + visibleRows)
+
+            return {startIndex, endIndex}
+
+        updateVisibleRows = ->
+            {startIndex, endIndex} = calculateVisibleRange()
+
+            return if startIndex == currentStartIndex and endIndex == currentEndIndex
+
+            callLifecycle('render-progress', (endIndex / totalRows) * 100, {
+                totalRows: totalRows
+                totalCols: colKeys.length
+                domElements: container.querySelectorAll('*').length
+                currentIndex: startIndex
+                endIndex: endIndex
+            })
+            # console.log("Virtualization: showing rows #{startIndex}-#{endIndex} of #{totalRows} total")
+
+            tbody = mainTable.querySelector('tbody')
+            if not tbody
+                tbody = document.createElement('tbody')
+                mainTable.appendChild(tbody)
+
+            tbody.innerHTML = ''
+
+            rowHeight = opts.table.virtualization.rowHeight
+
+            if startIndex > 0
+                topSpacer = document.createElement('tr')
+                topSpacer.className = 'pvt-virtual-spacer-top'
+                spacerTd = document.createElement('td')
+                spacerTd.style.cssText = """
+                    height: #{startIndex * rowHeight}px;
+                    padding: 0;
+                    border: none;
+                    background: transparent;
+                """
+                spacerTd.setAttribute('colspan', '999')
+                topSpacer.appendChild(spacerTd)
+                tbody.appendChild(topSpacer)
+
+            for i in [startIndex...endIndex]
+                if i < rowKeys.length
+                    rowKey = rowKeys[i]
+                    row = createDataRow(i, rowKey)
+                    tbody.appendChild(row)
+
+            remainingRows = totalRows - endIndex
+            if remainingRows > 0
+                bottomSpacer = document.createElement('tr')
+                bottomSpacer.className = 'pvt-virtual-spacer-bottom'
+                spacerTd = document.createElement('td')
+                spacerTd.style.cssText = """
+                    height: #{remainingRows * rowHeight}px;
+                    padding: 0;
+                    border: none;
+                    background: transparent;
+                """
+                spacerTd.setAttribute('colspan', '999')
+                bottomSpacer.appendChild(spacerTd)
+                tbody.appendChild(bottomSpacer)
+
+            currentStartIndex = startIndex
+            currentEndIndex = endIndex
+
+        setupScrollHandler = ->
+            scrollTimeout = null
+            container.addEventListener 'scroll', ->
+                clearTimeout(scrollTimeout) if scrollTimeout
+                scrollTimeout = setTimeout(updateVisibleRows, 16) # ~60fps
+
+        tbody = document.createElement('tbody')
+        mainTable.appendChild(tbody)
+
+        buildHeaders()
+
+        setupScrollHandler()
+        updateVisibleRows()
+
+        if opts.table.colTotals
+            totalsTable = document.createElement("table")
+            totalsTable.className = "pvtTable pvt-totals-table"
+            totalsTable.style.cssText = """
+                border-collapse: collapse;
+                width: auto;
+                min-width: 100%;
+                table-layout: auto;
+                margin-top: 0;
+                border-top: none;
+            """
+
+            totalsTbody = document.createElement("tbody")
+            totalsRow = createTotalsRow()
+            if totalsRow
+                totalsTbody.appendChild(totalsRow)
+                totalsTable.appendChild(totalsTbody)
+                container.appendChild(totalsTable)
+
+        callLifecycle('render-completed', 100, {
+            totalRows: rowKeys.length
+            totalCols: colKeys.length
+            isVirtualized: shouldVirtualize
+            domElements: container.querySelectorAll('*').length
+        })
+
+        return container

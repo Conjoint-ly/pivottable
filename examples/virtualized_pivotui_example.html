@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Виртуализированная PivotUI - Демонстрация</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+    <script src="../dist/pivot.js"></script>
+    <link rel="stylesheet" href="../dist/pivot.css">
+    <link rel="stylesheet" href="../dist/pivot-virtualized.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .controls {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .control-section {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .control-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .control-section h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .btn {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 4px 8px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .btn-primary {
+            background-color: #2196F3;
+        }
+
+        .btn-primary:hover {
+            background-color: #1976D2;
+        }
+
+        .btn-secondary {
+            background-color: #FF9800;
+        }
+
+        .btn-secondary:hover {
+            background-color: #F57C00;
+        }
+
+        .btn-danger {
+            background-color: #f44336;
+        }
+
+        .btn-danger:hover {
+            background-color: #da190b;
+        }
+
+        .btn-success {
+            background-color: #4CAF50;
+        }
+
+        .btn-success:hover {
+            background-color: #45a049;
+        }
+
+        .progress-info {
+            margin: 15px 0;
+            padding: 15px;
+            background: linear-gradient(90deg, #e3f2fd 0%, #f3e5f5 100%);
+            border-left: 4px solid #2196F3;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .checkbox-container {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .checkbox-container input[type="checkbox"] {
+            margin-right: 8px;
+            transform: scale(1.2);
+        }
+
+        .checkbox-container label {
+            font-weight: normal;
+            cursor: pointer;
+        }
+
+        .data-info {
+            margin: 15px 0;
+            padding: 15px;
+            background: linear-gradient(90deg, #f0f8ff 0%, #f0fff0 100%);
+            border: 1px solid #cce7ff;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .performance-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2196F3;
+        }
+
+        .stat-card .label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .renderer-selector {
+            margin: 15px 0;
+        }
+
+        .renderer-selector select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            min-width: 200px;
+        }
+
+        #pivotUI {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .virtualization-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 10px 0;
+            font-size: 13px;
+        }
+
+        .pvtVals .btn-toolbar {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .icon {
+            margin-right: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1><i class="fas fa-table icon"></i>Виртуализированная PivotUI - Демонстрация производительности</h1>
+        <p>Сравнение обычного и виртуализированного рендеринга для больших наборов данных</p>
+    </div>
+
+    <div class="controls">
+        <div class="control-section">
+            <h3><i class="fas fa-database icon"></i>Управление данными</h3>
+            <button id="generateSmall" class="btn">Малый набор (5,000 записей)</button>
+            <button id="generateMedium" class="btn btn-primary">Средний набор (25,000 записей)</button>
+            <button id="generateLarge" class="btn btn-secondary">Большой набор (100,000 записей)</button>
+            <button id="generateXLarge" class="btn btn-danger">Очень большой набор (500,000 записей)</button>
+
+            <div class="data-info" id="dataInfo" style="display: none;">
+                <strong><i class="fas fa-info-circle icon"></i>Информация о данных:</strong>
+                <span id="dataInfoText"></span>
+            </div>
+        </div>
+
+        <div class="control-section">
+            <h3><i class="fas fa-cogs icon"></i>Настройки рендеринга</h3>
+
+            <div class="renderer-selector">
+                <label for="rendererSelect"><strong>Выберите рендерер:</strong></label>
+                <select id="rendererSelect">
+                    <option value="auto">Автоматический выбор</option>
+                    <option value="Table">Обычная таблица</option>
+                    <option value="Virtualized Table">Виртуализированная таблица</option>
+                </select>
+            </div>
+
+            <div class="checkbox-container">
+                <input type="checkbox" id="asyncMode" checked>
+                <label for="asyncMode">Асинхронный режим обработки данных</label>
+            </div>
+
+            <div class="checkbox-container">
+                <input type="checkbox" id="showProgress" checked>
+                <label for="showProgress">Показывать прогресс выполнения</label>
+            </div>
+
+            <div class="virtualization-info" id="virtualizationInfo" style="display: none;">
+                <i class="fas fa-lightning-bolt icon"></i>
+                <strong>Виртуализация активна:</strong> Рендерится только видимая часть таблицы для оптимальной производительности.
+            </div>
+        </div>
+
+        <div class="control-section">
+            <h3><i class="fas fa-play icon"></i>Управление</h3>
+
+            <button id="refreshPivot" class="btn btn-success">
+                <i class="fas fa-sync-alt icon"></i>Создать/Обновить Pivot-таблицу
+            </button>
+
+            <button id="abortBtn" class="btn btn-danger" disabled>
+                <i class="fas fa-stop icon"></i>Прервать расчёт
+            </button>
+        </div>
+    </div>
+
+    <div class="progress-info" id="progressInfo" style="display: none;">
+        <strong><i id="progressIcon" class="fas fa-spinner fa-spin icon"></i>Прогресс выполнения:</strong>
+        <div>
+            <div><i id="metadataStageIcon"></i><strong> Этап: </strong><span id="stageText"></span></div>
+            <div><strong>Прогресс: </strong> <span id="metadataProgress"></span>%</div>
+            <div><strong>Обработано записей: </strong> <span id="metadataProcessedRecords"></span> из <span id="metadataTotalRecords"></span></div>
+            <div><strong>Время выполнения:</strong> <span id="metadataElapsedTime"></span>ms</div>
+        </div>
+    </div>
+
+    <div id="pivotUI"></div>
+
+    <script>
+        let currentData = [];
+        let isProcessing = false;
+        let performanceMetrics = {};
+
+        // Генерация тестовых данных
+        function generateTestData(numRecords, description) {
+            const startTime = performance.now();
+
+            const data = [];
+            const regions = ['North America', 'South America', 'Europe', 'Asia', 'Africa', 'Oceania'];
+            const countries = {
+                'North America': ['USA', 'Canada', 'Mexico'],
+                'South America': ['Brazil', 'Argentina', 'Chile', 'Colombia', 'Peru'],
+                'Europe': ['Germany', 'France', 'UK', 'Italy', 'Spain', 'Netherlands', 'Sweden'],
+                'Asia': ['China', 'Japan', 'India', 'South Korea', 'Thailand', 'Singapore', 'Malaysia'],
+                'Africa': ['South Africa', 'Egypt', 'Nigeria', 'Kenya', 'Morocco'],
+                'Oceania': ['Australia', 'New Zealand', 'Fiji']
+            };
+            const products = ['Electronics', 'Clothing', 'Books', 'Home & Garden', 'Sports', 'Automotive', 'Healthcare', 'Beauty'];
+            const categories = ['Premium', 'Standard', 'Economy', 'Luxury', 'Budget'];
+            const channels = ['Online', 'Retail', 'Wholesale', 'Direct', 'Partner'];
+            const months = ['January', 'February', 'March', 'April', 'May', 'June',
+                          'July', 'August', 'September', 'October', 'November', 'December'];
+            const years = [2020, 2021, 2022, 2023, 2024];
+
+            $('#dataInfo').show();
+            $('#dataInfoText').text(`Генерируется ${description}...`);
+
+            console.log(`Начинаем генерацию ${numRecords} записей...`);
+
+            for (let i = 0; i < numRecords; i++) {
+                const region = regions[Math.floor(Math.random() * regions.length)];
+                const country = countries[region][Math.floor(Math.random() * countries[region].length)];
+                const product = products[Math.floor(Math.random() * products.length)];
+                const category = categories[Math.floor(Math.random() * categories.length)];
+                const channel = channels[Math.floor(Math.random() * channels.length)];
+
+                data.push({
+                    ID: i + 1,
+                    Region: region,
+                    Country: country,
+                    Product: product,
+                    Category: category,
+                    Channel: channel,
+                    Month: months[Math.floor(Math.random() * months.length)],
+                    Year: years[Math.floor(Math.random() * years.length)],
+                    Quarter: 'Q' + (Math.floor(Math.random() * 4) + 1),
+                    Sales: Math.floor(Math.random() * 50000) + 1000,
+                    Quantity: Math.floor(Math.random() * 500) + 1,
+                    Profit: Math.floor(Math.random() * 15000) + 100,
+                    'Profit Margin': (Math.random() * 0.3 + 0.05).toFixed(3),
+                    'Customer Rating': (Math.random() * 2 + 3).toFixed(1),
+                    'Discount': (Math.random() * 0.2).toFixed(3),
+                    'Shipping Cost': Math.floor(Math.random() * 200) + 10
+                });
+
+                // Показываем прогресс для больших наборов
+                if (numRecords > 10000 && i % 10000 === 0 && i > 0) {
+                    const progress = Math.floor((i / numRecords) * 100);
+                    $('#dataInfoText').text(`Генерация ${description}: ${progress}% (${i.toLocaleString()}/${numRecords.toLocaleString()})`);
+                }
+            }
+
+            const generationTime = performance.now() - startTime;
+            currentData = data;
+
+            $('#dataInfoText').html(`
+                <strong>Готово!</strong> ${description}: ${numRecords.toLocaleString()} записей,
+                ${Object.keys(data[0]).length} полей.
+                Время генерации: ${Math.round(generationTime)}ms
+            `);
+
+            console.log(`Генерация завершена. Создано ${numRecords} записей за ${Math.round(generationTime)}ms.`);
+        }
+
+        // Переменные для управления процессом
+        let currentAbortFn = null;
+        let currentToggleVirtualizationFn = null;
+
+        // Lifecycle callback для обработки всех этапов с новым API
+        function lifecycleCallback(metadata, abortFn, toggleVirtualizationFn) {
+            if (!$('#showProgress').is(':checked')) return;
+
+            // Сохраняем функции управления для использования в UI
+            currentAbortFn = abortFn;
+            currentToggleVirtualizationFn = toggleVirtualizationFn;
+
+            const progressInfo = $('#progressInfo');
+
+            let stageText = '';
+            let icon = 'fas fa-spinner fa-spin';
+
+            switch(metadata.stage) {
+                case 'data-started':
+                    $('#stageText').text('Начало обработки данных');
+                    $('#metadataStageIcon').attr('class', 'fas fa-play icon');
+                    $('#abortBtn').prop('disabled', !abortFn);
+                    break;
+                case 'data-progress':
+                    $('#stageText').text('Обработка данных');
+                    $('#metadataStageIcon').attr('class', 'fas fa-database icon');
+                    $('#abortBtn').prop('disabled', !abortFn);
+                    break;
+                case 'data-completed':
+                    $('#stageText').text('Обработка данных завершена');
+                    $('#metadataStageIcon').attr('class', 'fas fa-check icon');
+                    break;
+                case 'render-started':
+                    if (metadata.isVirtualized) {
+                        $('#virtualizationInfo').show();
+                    } else {
+                        $('#virtualizationInfo').hide();
+                    }
+                    $('#progressIcon').show();
+                    $('#stageText').text('Начало рендеринга');
+                    $('#metadataStageIcon').attr('class', 'fas fa-play icon');
+                    $('#metadataProgress').text('0');
+                    $('#metadataProcessedRecords').text('0');
+                    $('#metadataTotalRecords').text(metadata.totalRows);
+                    $('#abortBtn').prop('disabled', !abortFn);
+                    progressInfo.show();
+                    break;
+                case 'render-progress':
+                    $('#stageText').text('Рендеринг таблицы');
+                    $('#metadataStageIcon').attr('class', 'fas fa-table');
+                    $('#metadataProgress').text(metadata.progress || 0);
+                    $('#metadataProcessedRecords').text(metadata.currentIndex || 0);
+                    $('#metadataElapsedTime').text(metadata.elapsedTime);
+                    $('#abortBtn').prop('disabled', !abortFn);
+                    console.log(`Lifecycle: ${$('#stageText').text()} - ${metadata.progress || 0}%`, {
+                        abortAvailable: !!abortFn,
+                        virtualizationToggleAvailable: !!toggleVirtualizationFn
+                    });
+                    break;
+                case 'render-completed':
+                    $('#progressIcon').hide();
+                    $('#stageText').text('Рендеринг завершен');
+                    $('#metadataStageIcon').attr('class', 'fas fa-check-circle');
+                    $('#metadataProgress').text('100');
+                    $('#metadataElapsedTime').text(metadata.elapsedTime);
+                    $('#abortBtn').prop('disabled', true);
+                    currentAbortFn = null;
+                    currentToggleVirtualizationFn = null;
+                    break;
+                default:
+                    $('#stageText').text(metadata.stage);
+                    $('#metadataStageIcon').attr('class', 'fas fa-spinner fa-spin');
+            }
+
+            performanceMetrics.totalTime = metadata.elapsedTime;
+        }
+
+        // Создание PivotUI
+        function createPivotUI() {
+            if (currentData.length === 0) {
+                alert('Сначала сгенерируйте данные!');
+                return;
+            }
+
+            const startTime = performance.now();
+            const asyncMode = $('#asyncMode').is(':checked');
+            const selectedRenderer = $('#rendererSelect').val();
+
+            isProcessing = asyncMode;
+            $('#abortBtn').prop('disabled', !asyncMode);
+
+            console.log(`Создаём PivotUI в ${asyncMode ? 'асинхронном' : 'синхронном'} режиме`);
+
+            // Определяем рендерер
+            let rendererName = selectedRenderer;
+            if (selectedRenderer === 'auto') {
+                // Автоматический выбор на основе размера данных
+                const tableSize = currentData.length;
+                rendererName = tableSize > 1000 ? 'Virtualized Table' : 'Table';
+                console.log(`Автоматический выбор рендерера: ${rendererName} (размер данных: ${tableSize})`);
+            }
+
+            const baseOptions = {
+                rows: ["Region", "Country"],
+                cols: ["Product", "Category"],
+                vals: ["Sales"],
+                aggregatorName: "Sum",
+                asyncMode,
+                progressInterval: 2000,
+                rendererName: 'Table',
+                rendererOptions: {
+                    table: {
+                        virtualization: {
+                            enabled: rendererName === 'Virtualized Table',
+                            rowHeight: 25,
+                            bufferSize: 10,
+                            containerHeight: 500,
+                            headerHeight: 80,
+                            threshold: 500
+                        }
+                    }
+                },
+                lifecycleCallback
+            };
+
+            try {
+                $('#pivotUI').show();
+                $("#pivotUI").pivotUI(currentData, baseOptions, false, "en");
+
+                if (!asyncMode) {
+                    console.log(`Синхронное создание PivotUI завершено`);
+                }
+            } catch (error) {
+                console.error('Ошибка создания PivotUI:', error);
+                alert(`Ошибка: ${error.message}`);
+                isProcessing = false;
+                $('#abortBtn').prop('disabled', true);
+            }
+        }
+
+        // Прервать расчёт
+        function abortCalculation() {
+            console.log('Прерывание расчёта...');
+
+            if (currentAbortFn) {
+                currentAbortFn();
+                console.log('Вызвана функция прерывания из lifecycle callback');
+            } else {
+                console.log('Функция прерывания недоступна (не подходящий этап)');
+            }
+
+            isProcessing = false;
+            $('#abortBtn').prop('disabled', true);
+            $('#progressInfo').hide();
+            currentAbortFn = null;
+            currentToggleVirtualizationFn = null;
+        }
+
+        // Event handlers
+        $(document).ready(function() {
+            $('#generateSmall').click(function() {
+                generateTestData(5000, 'малый набор данных');
+            });
+
+            $('#generateMedium').click(function() {
+                generateTestData(25000, 'средний набор данных');
+            });
+
+            $('#generateLarge').click(function() {
+                generateTestData(100000, 'большой набор данных');
+            });
+
+            $('#generateXLarge').click(function() {
+                if (confirm('Генерация 500,000 записей может занять время. Продолжить?')) {
+                    generateTestData(500000, 'очень большой набор данных');
+                }
+            });
+
+            $('#progressIcon').hide();
+            $('#refreshPivot').click(createPivotUI);
+            $('#abortBtn').click(abortCalculation);
+
+            $('#asyncMode').change(function() {
+                const isAsync = $(this).is(':checked');
+                $('#showProgress').prop('disabled', !isAsync);
+                if (!isAsync) {
+                    $('#showProgress').prop('checked', false);
+                    $('#progressInfo').hide();
+                }
+            });
+
+            $('#rendererSelect').change(function() {
+                const selected = $(this).val();
+                if (selected === 'Virtualized Table') {
+                    $('#virtualizationInfo').show();
+                } else {
+                    $('#virtualizationInfo').hide();
+                }
+            });
+
+            // Generate medium dataset on start
+            generateTestData(25000, 'средний набор данных');
+        });
+    </script>
+</body>
+</html>
