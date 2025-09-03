@@ -550,6 +550,7 @@ callWithJQuery ($) ->
                             containerHeight: 400
                             headerHeight: 60
                             threshold: 1000  # Использовать виртуализацию для таблиц больше 1000 строк
+                            autoHeight: false  # Автоматически определять высоту на основе pvtUi
                     localeStrings: totals: "Totals"
 
                 opts = $.extend(true, {}, defaults, opts)
@@ -1096,6 +1097,9 @@ callWithJQuery ($) ->
 
         opts = $.extend(true, {}, localeDefaults, $.extend({}, defaults, inputOpts))
 
+        # Передаем ссылку на элемент для автоопределения высоты
+        opts.rendererOptions.pivotUIElement = x
+
         x = this[0]
 
         if opts.asyncMode
@@ -1243,7 +1247,11 @@ callWithJQuery ($) ->
                 lifecycleCallback: null
                 progressInterval: 1000
                 renderChunkSize: 25
-                table: {}
+                table: {
+                    virtualization: {
+                        autoHeight: false  # Автоматически определять высоту на основе pvtUi
+                    }
+                }
             }
             localeStrings: localeStrings
 
@@ -1656,6 +1664,10 @@ callWithJQuery ($) ->
                 subopts.renderer = opts.renderers[renderer.val()]
                 subopts.rowOrder = rowOrderArrow.data("order")
                 subopts.colOrder = colOrderArrow.data("order")
+                
+                # Передаем ссылку на UI элемент для автоопределения высоты
+                subopts.rendererOptions = $.extend(true, {}, opts.rendererOptions)
+                subopts.rendererOptions.pivotUIElement = this[0]
                 #construct filter here
                 exclusions = {}
                 @find('input.pvtFilter').not(':checked').each ->
@@ -1917,10 +1929,49 @@ callWithJQuery ($) ->
                     rowHeight: 30
                     bufferSize: 5  # количество строк буфера сверху и снизу
                     containerHeight: 400  # высота контейнера таблицы
+                    autoHeight: false  # Автоматически определять высоту на основе pvtUi
             localeStrings: totals: "Totals"
             lifecycleCallback: null
 
         opts = $.extend(true, {}, defaults, opts)
+
+        # Автоопределение высоты контейнера
+        if opts.table.virtualization.autoHeight
+            # Пытаемся найти родительский элемент pvtUi
+            pivotUIElement = opts.pivotUIElement
+            
+            # Если не передан через опции, ищем в DOM
+            if not pivotUIElement and typeof $ != 'undefined'
+                pivotUIElement = $(".pvtUi").first()[0]
+            
+            if pivotUIElement
+                # Определяем доступную высоту
+                pivotUIHeight = pivotUIElement.clientHeight || pivotUIElement.offsetHeight
+                
+                # Если высота еще не определилась (элемент не отрисован), используем viewport
+                if pivotUIHeight <= 0 and typeof window != 'undefined'
+                    pivotUIHeight = window.innerHeight || 600
+                
+                # Находим таблицу внутри UI для более точного расчета
+                pivotTableElement = null
+                if typeof $ != 'undefined'
+                    pivotTableElement = $(pivotUIElement).find('.pvtTable, .pvtRendererArea').first()[0]
+                
+                if pivotTableElement
+                    # Определяем высоту области для таблицы
+                    if pivotTableElement.getBoundingClientRect
+                        tableAreaTop = pivotTableElement.getBoundingClientRect().top || 0
+                        uiAreaTop = if pivotUIElement.getBoundingClientRect then pivotUIElement.getBoundingClientRect().top else 0
+                        usedHeight = tableAreaTop - uiAreaTop + 50 # добавляем отступ
+                    else
+                        usedHeight = 120
+                else
+                    # Приблизительный расчет: контролы + отступы
+                    usedHeight = 120
+                
+                # Вычисляем доступную высоту
+                availableHeight = Math.max(200, pivotUIHeight - usedHeight)
+                opts.table.virtualization.containerHeight = availableHeight
 
         aborted = false
         startTime = Date.now()

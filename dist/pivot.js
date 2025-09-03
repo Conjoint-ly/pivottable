@@ -961,7 +961,8 @@
                 bufferSize: 5,
                 containerHeight: 400,
                 headerHeight: 60,
-                threshold: 1000 // Использовать виртуализацию для таблиц больше 1000 строк
+                threshold: 1000, // Использовать виртуализацию для таблиц больше 1000 строк
+                autoHeight: false // Автоматически определять высоту на основе pvtUi
               }
             },
             localeStrings: {
@@ -1627,6 +1628,8 @@
         localeStrings: localeStrings
       };
       opts = $.extend(true, {}, localeDefaults, $.extend({}, defaults, inputOpts));
+      // Передаем ссылку на элемент для автоопределения высоты
+      opts.rendererOptions.pivotUIElement = x;
       x = this[0];
       if (opts.asyncMode) {
         // Async mode - return promise
@@ -1811,7 +1814,11 @@
           lifecycleCallback: null,
           progressInterval: 1000,
           renderChunkSize: 25,
-          table: {}
+          table: {
+            virtualization: {
+              autoHeight: false // Автоматически определять высоту на основе pvtUi
+            }
+          }
         },
         localeStrings: localeStrings
       };
@@ -2381,6 +2388,10 @@
           subopts.renderer = opts.renderers[renderer.val()];
           subopts.rowOrder = rowOrderArrow.data("order");
           subopts.colOrder = colOrderArrow.data("order");
+          
+          // Передаем ссылку на UI элемент для автоопределения высоты
+          subopts.rendererOptions = $.extend(true, {}, opts.rendererOptions);
+          subopts.rendererOptions.pivotUIElement = this[0];
           //construct filter here
           exclusions = {};
           this.find('input.pvtFilter').not(':checked').each(function() {
@@ -2690,7 +2701,7 @@
       return this;
     };
     return pivotTableRendererVirtualized = function(pivotData, opts) {
-      var aborted, applyExistingColumnWidths, applyWidthsToAllSections, applyWidthsToDataRows, applyWidthsToFooter, applyWidthsToHeaders, buildFooter, buildHeaders, calculateTotalColumns, calculateVisibleRange, callLifecycle, colAttrs, colKeys, columnWidths, columnWidthsMeasured, container, createDataRow, currentEndIndex, currentStartIndex, defaults, getClickHandler, isUpdatingRows, mainTable, measureAndApplyColumnWidths, rowAttrs, rowKeys, setupScrollHandler, shouldVirtualize, spanSize, startTime, tbody, totalColumns, totalRows, updateVisibleRows;
+      var aborted, applyExistingColumnWidths, applyWidthsToAllSections, applyWidthsToDataRows, applyWidthsToFooter, applyWidthsToHeaders, availableHeight, buildFooter, buildHeaders, calculateTotalColumns, calculateVisibleRange, callLifecycle, colAttrs, colKeys, columnWidths, columnWidthsMeasured, container, createDataRow, currentEndIndex, currentStartIndex, defaults, getClickHandler, isUpdatingRows, mainTable, measureAndApplyColumnWidths, pivotTableElement, pivotUIElement, pivotUIHeight, rowAttrs, rowKeys, setupScrollHandler, shouldVirtualize, spanSize, startTime, tableAreaTop, tbody, totalColumns, totalRows, uiAreaTop, updateVisibleRows, usedHeight;
       defaults = {
         table: {
           clickCallback: null,
@@ -2700,7 +2711,8 @@
             enabled: false,
             rowHeight: 30,
             bufferSize: 5, // количество строк буфера сверху и снизу
-            containerHeight: 400 // высота контейнера таблицы
+            containerHeight: 400, // высота контейнера таблицы
+            autoHeight: false // Автоматически определять высоту на основе pvtUi
           }
         },
         localeStrings: {
@@ -2709,6 +2721,48 @@
         lifecycleCallback: null
       };
       opts = $.extend(true, {}, defaults, opts);
+      // Автоопределение высоты контейнера
+      if (opts.table.virtualization.autoHeight) {
+        // Пытаемся найти родительский элемент pvtUi
+        pivotUIElement = opts.pivotUIElement;
+        
+        // Если не передан через опции, ищем в DOM
+        if (!pivotUIElement && typeof $ !== 'undefined') {
+          pivotUIElement = $(".pvtUi").first()[0];
+        }
+        if (pivotUIElement) {
+          // Определяем доступную высоту
+          pivotUIHeight = pivotUIElement.clientHeight || pivotUIElement.offsetHeight;
+          
+          // Если высота еще не определилась (элемент не отрисован), используем viewport
+          if (pivotUIHeight <= 0 && typeof window !== 'undefined') {
+            pivotUIHeight = window.innerHeight || 600;
+          }
+          
+          // Находим таблицу внутри UI для более точного расчета
+          pivotTableElement = null;
+          if (typeof $ !== 'undefined') {
+            pivotTableElement = $(pivotUIElement).find('.pvtTable, .pvtRendererArea').first()[0];
+          }
+          if (pivotTableElement) {
+            // Определяем высоту области для таблицы
+            if (pivotTableElement.getBoundingClientRect) {
+              tableAreaTop = pivotTableElement.getBoundingClientRect().top || 0;
+              uiAreaTop = pivotUIElement.getBoundingClientRect ? pivotUIElement.getBoundingClientRect().top : 0;
+              usedHeight = tableAreaTop - uiAreaTop + 50; // добавляем отступ
+            } else {
+              usedHeight = 120;
+            }
+          } else {
+            // Приблизительный расчет: контролы + отступы
+            usedHeight = 120;
+          }
+          
+          // Вычисляем доступную высоту
+          availableHeight = Math.max(200, pivotUIHeight - usedHeight);
+          opts.table.virtualization.containerHeight = availableHeight;
+        }
+      }
       aborted = false;
       startTime = Date.now();
       callLifecycle = function(stage, progress, metadata = null) {
