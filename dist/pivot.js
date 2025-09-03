@@ -2690,7 +2690,7 @@
       return this;
     };
     return pivotTableRendererVirtualized = function(pivotData, opts) {
-      var aborted, buildHeaders, calculateVisibleRange, callLifecycle, colAttrs, colKeys, container, createDataRow, createTotalsRow, currentEndIndex, currentStartIndex, defaults, getClickHandler, mainTable, rowAttrs, rowKeys, setupScrollHandler, shouldVirtualize, spanSize, startTime, tbody, totalRows, totalsRow, totalsTable, totalsTbody, updateVisibleRows;
+      var aborted, applyExistingColumnWidths, applyWidthsToAllSections, applyWidthsToDataRows, applyWidthsToFooter, applyWidthsToHeaders, buildFooter, buildHeaders, calculateTotalColumns, calculateVisibleRange, callLifecycle, colAttrs, colKeys, columnWidths, columnWidthsMeasured, container, createDataRow, currentEndIndex, currentStartIndex, defaults, getClickHandler, isUpdatingRows, mainTable, measureAndApplyColumnWidths, rowAttrs, rowKeys, setupScrollHandler, shouldVirtualize, spanSize, startTime, tbody, totalColumns, totalRows, updateVisibleRows;
       defaults = {
         table: {
           clickCallback: null,
@@ -2767,11 +2767,12 @@ border: 1px solid #ccc;
 background: white;`;
       mainTable = document.createElement("table");
       mainTable.className = "pvtTable pvt-virtualized-table";
-      mainTable.style.cssText = `border-collapse: collapse;
-width: auto;
-min-width: 100%;
-table-layout: auto;`;
       container.appendChild(mainTable);
+      // Variables for synchronizing column widths
+      columnWidths = [];
+      totalColumns = 0;
+      isUpdatingRows = false; // Flag to prevent update conflicts
+      columnWidthsMeasured = false; // Flag to measure widths only once
       if (opts.table.clickCallback) {
         getClickHandler = function(value, rowValues, colValues) {
           var attr, filters, i;
@@ -2822,6 +2823,208 @@ table-layout: auto;`;
           len++;
         }
         return len;
+      };
+      calculateTotalColumns = function() {
+        var totalCols;
+        totalCols = rowAttrs.length;
+        if (colAttrs.length > 0) {
+          totalCols += 1; // for "attribute" column
+        }
+        totalCols += colKeys.length; // for data column
+        if (opts.table.rowTotals) {
+          totalCols += 1; // total column
+        }
+        return totalCols;
+      };
+      measureAndApplyColumnWidths = function() {
+        var cell, cells, dataRow, i, l, len1, newColumnWidths, originalStyle, rect, width;
+        // Measure widths only once to avoid accumulating changes
+        if (columnWidthsMeasured) {
+          return;
+        }
+        // Find a data row for measurement (not a spacer)
+        dataRow = mainTable.querySelector('tbody tr:not(.pvt-virtual-spacer-top):not(.pvt-virtual-spacer-bottom)');
+        if (!dataRow) {
+          return;
+        }
+        cells = dataRow.querySelectorAll('th, td');
+        if (cells.length === 0) {
+          return;
+        }
+        // Measure the natural width of each cell (without forcing the width)
+        newColumnWidths = [];
+        for (i = l = 0, len1 = cells.length; l < len1; i = ++l) {
+          cell = cells[i];
+          // Temporarily remove set widths to get the natural size
+          originalStyle = cell.style.cssText;
+          cell.style.width = 'auto';
+          cell.style.minWidth = 'auto';
+          cell.style.maxWidth = 'none';
+          rect = cell.getBoundingClientRect();
+          width = Math.max(rect.width, 80); // min 80px
+          newColumnWidths.push(width);
+          // Restore the style
+          cell.style.cssText = originalStyle;
+        }
+        columnWidths = newColumnWidths;
+        columnWidthsMeasured = true;
+        return applyWidthsToAllSections();
+      };
+      // Function to apply already measured column widths to new rows
+      applyExistingColumnWidths = function() {
+        if (columnWidths.length === 0) {
+          return;
+        }
+        return applyWidthsToDataRows();
+      };
+      // Apply widths to all sections of the table
+      applyWidthsToAllSections = function() {
+        if (columnWidths.length === 0) {
+          return;
+        }
+        applyWidthsToHeaders();
+        applyWidthsToFooter();
+        return applyWidthsToDataRows();
+      };
+      applyWidthsToDataRows = function() {
+        var cell, cells, dataRow, dataRows, i, l, len1, results;
+        if (columnWidths.length === 0) {
+          return;
+        }
+        dataRows = mainTable.querySelectorAll('tbody tr:not(.pvt-virtual-spacer-top):not(.pvt-virtual-spacer-bottom)');
+        results = [];
+        for (l = 0, len1 = dataRows.length; l < len1; l++) {
+          dataRow = dataRows[l];
+          cells = dataRow.querySelectorAll('th, td');
+          results.push((function() {
+            var len2, n, results1;
+            results1 = [];
+            for (i = n = 0, len2 = cells.length; n < len2; i = ++n) {
+              cell = cells[i];
+              if (columnWidths[i] != null) {
+                cell.style.width = `${columnWidths[i]}px`;
+                cell.style.minWidth = `${columnWidths[i]}px`;
+                results1.push(cell.style.maxWidth = `${columnWidths[i]}px`);
+              } else {
+                results1.push(void 0);
+              }
+            }
+            return results1;
+          })());
+        }
+        return results;
+      };
+      applyWidthsToHeaders = function() {
+        var actualColumnIndex, cell, cellIndex, cells, colspan, dataColumnIndex, hasTotalColumn, headerRow, headerRows, i, l, len1, numDataColumns, numRowHeaders, results, rowIndex, totalColumnIndex, totalDataWidth, totalRowHeaderWidth, totalWidth, width;
+        if (columnWidths.length === 0) {
+          return;
+        }
+        // Data columns struct: [rowHeaders...] [dataColumns...] [totalColumn?]
+        numRowHeaders = rowAttrs.length;
+        numDataColumns = colKeys.length;
+        hasTotalColumn = opts.table.rowTotals || colAttrs.length === 0;
+        // Apply to headers row by row
+        headerRows = mainTable.querySelectorAll('thead tr');
+        results = [];
+        for (rowIndex = l = 0, len1 = headerRows.length; l < len1; rowIndex = ++l) {
+          headerRow = headerRows[rowIndex];
+          cells = headerRow.querySelectorAll('th');
+          dataColumnIndex = 0; // Index in columnWidths array
+          results.push((function() {
+            var len2, n, o, ref, ref1, ref2, ref3, results1, t, u;
+            results1 = [];
+            for (cellIndex = n = 0, len2 = cells.length; n < len2; cellIndex = ++n) {
+              cell = cells[cellIndex];
+              colspan = parseInt(cell.getAttribute('colspan')) || 1;
+              if (cellIndex === 0 && colspan === numRowHeaders && rowIndex === 0) {
+                // First merged cell for row headers
+                totalRowHeaderWidth = 0;
+                for (i = o = 0, ref = numRowHeaders; (0 <= ref ? o < ref : o > ref); i = 0 <= ref ? ++o : --o) {
+                  totalRowHeaderWidth += columnWidths[i] || 100;
+                }
+                cell.style.width = `${totalRowHeaderWidth}px`;
+                cell.style.minWidth = `${totalRowHeaderWidth}px`;
+                results1.push(cell.style.maxWidth = `${totalRowHeaderWidth}px`);
+              } else if (cell.classList.contains('pvtAxisLabel')) {
+                if (dataColumnIndex < numRowHeaders) {
+                  // Column rows attributes
+                  width = columnWidths[dataColumnIndex] || 100;
+                  cell.style.width = `${width}px`;
+                  cell.style.minWidth = `${width}px`;
+                  cell.style.maxWidth = `${width}px`;
+                  results1.push(dataColumnIndex++);
+                } else {
+                  // Column attribute header - spans all data columns
+                  totalDataWidth = 0;
+                  for (i = t = ref1 = numRowHeaders, ref2 = numRowHeaders + numDataColumns; (ref1 <= ref2 ? t < ref2 : t > ref2); i = ref1 <= ref2 ? ++t : --t) {
+                    totalDataWidth += columnWidths[i] || 80;
+                  }
+                  cell.style.width = `${totalDataWidth}px`;
+                  cell.style.minWidth = `${totalDataWidth}px`;
+                  results1.push(cell.style.maxWidth = `${totalDataWidth}px`);
+                }
+              } else if (cell.classList.contains('pvtColLabel')) {
+                // Data column headers
+                actualColumnIndex = numRowHeaders + dataColumnIndex;
+                if (colspan === 1) {
+                  width = columnWidths[actualColumnIndex] || 80;
+                  cell.style.width = `${width}px`;
+                  cell.style.minWidth = `${width}px`;
+                  cell.style.maxWidth = `${width}px`;
+                  results1.push(dataColumnIndex++);
+                } else {
+                  // Merged cell for data columns
+                  totalWidth = 0;
+                  for (i = u = 0, ref3 = colspan; (0 <= ref3 ? u < ref3 : u > ref3); i = 0 <= ref3 ? ++u : --u) {
+                    totalWidth += columnWidths[actualColumnIndex + i] || 80;
+                  }
+                  cell.style.width = `${totalWidth}px`;
+                  cell.style.minWidth = `${totalWidth}px`;
+                  cell.style.maxWidth = `${totalWidth}px`;
+                  results1.push(dataColumnIndex += colspan);
+                }
+              } else if (cell.classList.contains('pvtTotalLabel')) {
+                if (hasTotalColumn) {
+                  totalColumnIndex = numRowHeaders + numDataColumns;
+                  width = columnWidths[totalColumnIndex] || 80;
+                  cell.style.width = `${width}px`;
+                  cell.style.minWidth = `${width}px`;
+                  results1.push(cell.style.maxWidth = `${width}px`);
+                } else {
+                  results1.push(void 0);
+                }
+              } else {
+                results1.push(void 0);
+              }
+            }
+            return results1;
+          })());
+        }
+        return results;
+      };
+      // Applying widths to the totals row in tfoot - matches the data structure exactly
+      applyWidthsToFooter = function() {
+        var cell, cells, footerRow, i, l, len1, results;
+        if (columnWidths.length === 0) {
+          return;
+        }
+        footerRow = mainTable.querySelector('tfoot tr');
+        if (!footerRow) {
+          return;
+        }
+        cells = footerRow.querySelectorAll('th, td');
+        results = [];
+        for (i = l = 0, len1 = cells.length; l < len1; i = ++l) {
+          cell = cells[i];
+          if (columnWidths[i] != null) {
+            cell.style.width = `${columnWidths[i]}px`;
+            cell.style.minWidth = `${columnWidths[i]}px`;
+            results.push(cell.style.maxWidth = `${columnWidths[i]}px`);
+          } else {
+            results.push(void 0);
+          }
+        }
+        return results;
       };
       buildHeaders = function() {
         var c, colKey, i, j, r, ref, ref1, ref2, ref3, th, thead, tr, x;
@@ -2890,6 +3093,55 @@ table-layout: auto;`;
         }
         return mainTable.appendChild(thead);
       };
+      buildFooter = function() {
+        var colKey, j, td, tfoot, th, totalAggregator, tr, val;
+        if (!(opts.table.colTotals || rowAttrs.length === 0)) {
+          return;
+        }
+        tfoot = document.createElement("tfoot");
+        tr = document.createElement("tr");
+        tr.className = "pvt-totals-row";
+        tr.style.cssText = "background: #f9f9f9; border-top: 2px solid #999; font-weight: bold;";
+        if (opts.table.colTotals || rowAttrs.length === 0) {
+          th = document.createElement("th");
+          th.className = "pvtTotalLabel pvtColTotalLabel";
+          th.innerHTML = opts.localeStrings.totals;
+          th.setAttribute("colspan", rowAttrs.length + (colAttrs.length === 0 ? 0 : 1));
+          th.style.cssText = "background: #e6e6e6; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap;";
+          tr.appendChild(th);
+        }
+        for (j in colKeys) {
+          if (!hasProp.call(colKeys, j)) continue;
+          colKey = colKeys[j];
+          totalAggregator = pivotData.getAggregator([], colKey);
+          val = totalAggregator.value();
+          td = document.createElement("td");
+          td.className = "pvtTotal colTotal";
+          td.textContent = totalAggregator.format(val);
+          td.setAttribute("data-value", val);
+          td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; font-weight: bold; background: #f9f9f9; color: #000; white-space: nowrap; min-width: 80px;";
+          if (getClickHandler != null) {
+            td.onclick = getClickHandler(val, [], colKey);
+          }
+          td.setAttribute("data-for", "col" + j);
+          tr.appendChild(td);
+        }
+        if (opts.table.rowTotals || colAttrs.length === 0) {
+          totalAggregator = pivotData.getAggregator([], []);
+          val = totalAggregator.value();
+          td = document.createElement("td");
+          td.className = "pvtGrandTotal";
+          td.textContent = totalAggregator.format(val);
+          td.setAttribute("data-value", val);
+          td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; font-weight: bold; background: #e6e6e6; color: #000; white-space: nowrap; min-width: 80px;";
+          if (getClickHandler != null) {
+            td.onclick = getClickHandler(val, [], []);
+          }
+          tr.appendChild(td);
+        }
+        tfoot.appendChild(tr);
+        return mainTable.appendChild(tfoot);
+      };
       createDataRow = function(i, rowKey) {
         var aggregator, colKey, j, td, th, totalAggregator, tr, txt, val, x;
         tr = document.createElement("tr");
@@ -2942,57 +3194,10 @@ table-layout: auto;`;
         }
         return tr;
       };
-      createTotalsRow = function() {
-        var colKey, j, td, th, totalAggregator, tr, val;
-        if (!(opts.table.colTotals || rowAttrs.length === 0)) {
-          return;
-        }
-        tr = document.createElement("tr");
-        tr.className = "pvt-totals-row";
-        tr.style.cssText = "background: #f9f9f9; border-top: 2px solid #999; font-weight: bold;";
-        if (opts.table.colTotals || rowAttrs.length === 0) {
-          th = document.createElement("th");
-          th.className = "pvtTotalLabel pvtColTotalLabel";
-          th.innerHTML = opts.localeStrings.totals;
-          th.setAttribute("colspan", rowAttrs.length + (colAttrs.length === 0 ? 0 : 1));
-          th.style.cssText = "background: #e6e6e6; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap;";
-          tr.appendChild(th);
-        }
-        for (j in colKeys) {
-          if (!hasProp.call(colKeys, j)) continue;
-          colKey = colKeys[j];
-          totalAggregator = pivotData.getAggregator([], colKey);
-          val = totalAggregator.value();
-          td = document.createElement("td");
-          td.className = "pvtTotal colTotal";
-          td.textContent = totalAggregator.format(val);
-          td.setAttribute("data-value", val);
-          td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; font-weight: bold; background: #f9f9f9; color: #000; white-space: nowrap; min-width: 80px;";
-          if (getClickHandler != null) {
-            td.onclick = getClickHandler(val, [], colKey);
-          }
-          td.setAttribute("data-for", "col" + j);
-          tr.appendChild(td);
-        }
-        if (opts.table.rowTotals || colAttrs.length === 0) {
-          totalAggregator = pivotData.getAggregator([], []);
-          val = totalAggregator.value();
-          td = document.createElement("td");
-          td.className = "pvtGrandTotal";
-          td.textContent = totalAggregator.format(val);
-          td.setAttribute("data-value", val);
-          td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; font-weight: bold; background: #e6e6e6; color: #000; white-space: nowrap; min-width: 80px;";
-          if (getClickHandler != null) {
-            td.onclick = getClickHandler(val, [], []);
-          }
-          tr.appendChild(td);
-        }
-        return tr;
-      };
       currentStartIndex = 0;
       currentEndIndex = 0;
       calculateVisibleRange = function() {
-        var adjustedScrollTop, bufferSize, containerHeight, endIndex, headerHeight, ref, rowHeight, scrollTop, startIndex, visibleRows;
+        var adjustedScrollTop, bufferSize, containerHeight, endIndex, headerHeight, maxScrollTop, ref, rowHeight, scrollTop, startIndex, visibleRows;
         scrollTop = container.scrollTop;
         containerHeight = opts.table.virtualization.containerHeight;
         rowHeight = opts.table.virtualization.rowHeight;
@@ -3002,14 +3207,25 @@ table-layout: auto;`;
         startIndex = Math.max(0, Math.floor(adjustedScrollTop / rowHeight) - bufferSize);
         visibleRows = Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize);
         endIndex = Math.min(totalRows, startIndex + visibleRows);
+        // Boundary check to prevent jitter
+        maxScrollTop = Math.max(0, (totalRows * rowHeight) - (containerHeight - headerHeight));
+        if (scrollTop >= maxScrollTop) {
+          // If reached the end, fix endIndex at the maximum value
+          endIndex = totalRows;
+          startIndex = Math.max(0, endIndex - visibleRows + bufferSize);
+        }
         return {startIndex, endIndex};
       };
       updateVisibleRows = function() {
         var bottomSpacer, endIndex, i, l, ref, ref1, remainingRows, row, rowHeight, rowKey, spacerTd, startIndex, tbody, topSpacer;
+        if (isUpdatingRows) {
+          return;
+        }
         ({startIndex, endIndex} = calculateVisibleRange());
         if (startIndex === currentStartIndex && endIndex === currentEndIndex) {
           return;
         }
+        isUpdatingRows = true;
         callLifecycle('render-progress', (endIndex / totalRows) * 100, {
           totalRows: totalRows,
           totalCols: colKeys.length,
@@ -3058,7 +3274,20 @@ background: transparent;`;
           tbody.appendChild(bottomSpacer);
         }
         currentStartIndex = startIndex;
-        return currentEndIndex = endIndex;
+        currentEndIndex = endIndex;
+        // Measure and apply column widths only during the first render
+        if (!columnWidthsMeasured) {
+          return setTimeout(function() {
+            measureAndApplyColumnWidths();
+            return isUpdatingRows = false;
+          }, 10);
+        } else {
+          // Apply already measured column widths to new rows
+          return setTimeout(function() {
+            applyExistingColumnWidths();
+            return isUpdatingRows = false;
+          }, 5);
+        }
       };
       setupScrollHandler = function() {
         var scrollTimeout;
@@ -3072,26 +3301,14 @@ background: transparent;`;
       };
       tbody = document.createElement('tbody');
       mainTable.appendChild(tbody);
+      totalColumns = calculateTotalColumns();
       buildHeaders();
+      // Add totals to the footer of the main table
+      if (opts.table.colTotals) {
+        buildFooter();
+      }
       setupScrollHandler();
       updateVisibleRows();
-      if (opts.table.colTotals) {
-        totalsTable = document.createElement("table");
-        totalsTable.className = "pvtTable pvt-totals-table";
-        totalsTable.style.cssText = `border-collapse: collapse;
-width: auto;
-min-width: 100%;
-table-layout: auto;
-margin-top: 0;
-border-top: none;`;
-        totalsTbody = document.createElement("tbody");
-        totalsRow = createTotalsRow();
-        if (totalsRow) {
-          totalsTbody.appendChild(totalsRow);
-          totalsTable.appendChild(totalsTbody);
-          container.appendChild(totalsTable);
-        }
-      }
       callLifecycle('render-completed', 100, {
         totalRows: rowKeys.length,
         totalCols: colKeys.length,

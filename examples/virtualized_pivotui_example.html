@@ -471,7 +471,7 @@
                             bufferSize: 10,
                             containerHeight: 500,
                             headerHeight: 80,
-                            threshold: 500
+                            // threshold: 500
                         }
                     }
                 },
@@ -479,7 +479,7 @@
 
             try {
                 $('#pivotUI').show();
-                $("#pivotUI").pivotUI(currentData, baseOptions, false, "en");
+                $("#pivotUI").pivotUI(currentData, baseOptions, true, "en");
 
                 if (!asyncMode) {
                     console.log(`Синхронное создание PivotUI завершено`);

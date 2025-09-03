@@ -1981,14 +1981,14 @@ callWithJQuery ($) ->
 
         mainTable = document.createElement("table")
         mainTable.className = "pvtTable pvt-virtualized-table"
-        mainTable.style.cssText = """
-            border-collapse: collapse;
-            width: auto;
-            min-width: 100%;
-            table-layout: auto;
-        """
 
         container.appendChild(mainTable)
+
+        # Variables for synchronizing column widths
+        columnWidths = []
+        totalColumns = 0
+        isUpdatingRows = false  # Flag to prevent update conflicts
+        columnWidthsMeasured = false  # Flag to measure widths only once
 
         if opts.table.clickCallback
             getClickHandler = (value, rowValues, colValues) ->
@@ -2013,6 +2013,157 @@ callWithJQuery ($) ->
                 break if stop
                 len++
             return len
+
+        calculateTotalColumns = ->
+            totalCols = rowAttrs.length
+            if colAttrs.length > 0
+                totalCols += 1 # for "attribute" column
+            totalCols += colKeys.length # for data column
+            if opts.table.rowTotals
+                totalCols += 1 # total column
+            return totalCols
+
+        measureAndApplyColumnWidths = ->
+            # Measure widths only once to avoid accumulating changes
+            return if columnWidthsMeasured
+
+            # Find a data row for measurement (not a spacer)
+            dataRow = mainTable.querySelector('tbody tr:not(.pvt-virtual-spacer-top):not(.pvt-virtual-spacer-bottom)')
+            return unless dataRow
+
+            cells = dataRow.querySelectorAll('th, td')
+            return if cells.length == 0
+
+            # Measure the natural width of each cell (without forcing the width)
+            newColumnWidths = []
+            for cell, i in cells
+                # Temporarily remove set widths to get the natural size
+                originalStyle = cell.style.cssText
+                cell.style.width = 'auto'
+                cell.style.minWidth = 'auto'
+                cell.style.maxWidth = 'none'
+
+                rect = cell.getBoundingClientRect()
+                width = Math.max(rect.width, 80) # min 80px
+                newColumnWidths.push(width)
+
+                # Restore the style
+                cell.style.cssText = originalStyle
+
+            columnWidths = newColumnWidths
+            columnWidthsMeasured = true
+
+            applyWidthsToAllSections()
+
+        # Function to apply already measured column widths to new rows
+        applyExistingColumnWidths = ->
+            return if columnWidths.length == 0
+            applyWidthsToDataRows()
+
+        # Apply widths to all sections of the table
+        applyWidthsToAllSections = ->
+            return if columnWidths.length == 0
+
+            applyWidthsToHeaders()
+            applyWidthsToFooter()
+            applyWidthsToDataRows()
+
+        applyWidthsToDataRows = ->
+            return if columnWidths.length == 0
+
+            dataRows = mainTable.querySelectorAll('tbody tr:not(.pvt-virtual-spacer-top):not(.pvt-virtual-spacer-bottom)')
+            for dataRow in dataRows
+                cells = dataRow.querySelectorAll('th, td')
+                for cell, i in cells
+                    if columnWidths[i]?
+                        cell.style.width = "#{columnWidths[i]}px"
+                        cell.style.minWidth = "#{columnWidths[i]}px"
+                        cell.style.maxWidth = "#{columnWidths[i]}px"
+
+        applyWidthsToHeaders = ->
+            return if columnWidths.length == 0
+
+            # Data columns struct: [rowHeaders...] [dataColumns...] [totalColumn?]
+            numRowHeaders = rowAttrs.length
+            numDataColumns = colKeys.length
+            hasTotalColumn = opts.table.rowTotals || colAttrs.length == 0
+
+            # Apply to headers row by row
+            headerRows = mainTable.querySelectorAll('thead tr')
+            for headerRow, rowIndex in headerRows
+                cells = headerRow.querySelectorAll('th')
+                dataColumnIndex = 0  # Index in columnWidths array
+
+                for cell, cellIndex in cells
+                    colspan = parseInt(cell.getAttribute('colspan')) || 1
+
+                    if cellIndex == 0 and colspan == numRowHeaders and rowIndex == 0
+                        # First merged cell for row headers
+                        totalRowHeaderWidth = 0
+                        for i in [0...numRowHeaders]
+                            totalRowHeaderWidth += columnWidths[i] || 100
+                        cell.style.width = "#{totalRowHeaderWidth}px"
+                        cell.style.minWidth = "#{totalRowHeaderWidth}px"
+                        cell.style.maxWidth = "#{totalRowHeaderWidth}px"
+
+                    else if cell.classList.contains('pvtAxisLabel')
+                        if dataColumnIndex < numRowHeaders
+                            # Column rows attributes
+                            width = columnWidths[dataColumnIndex] || 100
+                            cell.style.width = "#{width}px"
+                            cell.style.minWidth = "#{width}px"
+                            cell.style.maxWidth = "#{width}px"
+                            dataColumnIndex++
+                        else
+                            # Column attribute header - spans all data columns
+                            totalDataWidth = 0
+                            for i in [numRowHeaders...numRowHeaders + numDataColumns]
+                                totalDataWidth += columnWidths[i] || 80
+                            cell.style.width = "#{totalDataWidth}px"
+                            cell.style.minWidth = "#{totalDataWidth}px"
+                            cell.style.maxWidth = "#{totalDataWidth}px"
+
+                    else if cell.classList.contains('pvtColLabel')
+                        # Data column headers
+                        actualColumnIndex = numRowHeaders + dataColumnIndex
+                        if colspan == 1
+                            width = columnWidths[actualColumnIndex] || 80
+                            cell.style.width = "#{width}px"
+                            cell.style.minWidth = "#{width}px"
+                            cell.style.maxWidth = "#{width}px"
+                            dataColumnIndex++
+                        else
+                            # Merged cell for data columns
+                            totalWidth = 0
+                            for i in [0...colspan]
+                                totalWidth += columnWidths[actualColumnIndex + i] || 80
+                            cell.style.width = "#{totalWidth}px"
+                            cell.style.minWidth = "#{totalWidth}px"
+                            cell.style.maxWidth = "#{totalWidth}px"
+                            dataColumnIndex += colspan
+
+                    else if cell.classList.contains('pvtTotalLabel')
+                        if hasTotalColumn
+                            totalColumnIndex = numRowHeaders + numDataColumns
+                            width = columnWidths[totalColumnIndex] || 80
+                            cell.style.width = "#{width}px"
+                            cell.style.minWidth = "#{width}px"
+                            cell.style.maxWidth = "#{width}px"
+
+        # Applying widths to the totals row in tfoot - matches the data structure exactly
+        applyWidthsToFooter = ->
+            return if columnWidths.length == 0
+
+            footerRow = mainTable.querySelector('tfoot tr')
+            return unless footerRow
+
+            cells = footerRow.querySelectorAll('th, td')
+
+            for cell, i in cells
+                if columnWidths[i]?
+                    cell.style.width = "#{columnWidths[i]}px"
+                    cell.style.minWidth = "#{columnWidths[i]}px"
+                    cell.style.maxWidth = "#{columnWidths[i]}px"
 
         buildHeaders = ->
             thead = document.createElement("thead")
@@ -2075,6 +2226,50 @@ callWithJQuery ($) ->
 
             mainTable.appendChild thead
 
+        buildFooter = ->
+            return unless opts.table.colTotals || rowAttrs.length == 0
+
+            tfoot = document.createElement("tfoot")
+            tr = document.createElement("tr")
+            tr.className = "pvt-totals-row"
+            tr.style.cssText = "background: #f9f9f9; border-top: 2px solid #999; font-weight: bold;"
+
+            if opts.table.colTotals || rowAttrs.length == 0
+                th = document.createElement("th")
+                th.className = "pvtTotalLabel pvtColTotalLabel"
+                th.innerHTML = opts.localeStrings.totals
+                th.setAttribute("colspan", rowAttrs.length + (if colAttrs.length == 0 then 0 else 1))
+                th.style.cssText = "background: #e6e6e6; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap;"
+                tr.appendChild th
+
+            for own j, colKey of colKeys
+                totalAggregator = pivotData.getAggregator([], colKey)
+                val = totalAggregator.value()
+                td = document.createElement("td")
+                td.className = "pvtTotal colTotal"
+                td.textContent = totalAggregator.format(val)
+                td.setAttribute("data-value", val)
+                td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; font-weight: bold; background: #f9f9f9; color: #000; white-space: nowrap; min-width: 80px;"
+                if getClickHandler?
+                    td.onclick = getClickHandler(val, [], colKey)
+                td.setAttribute("data-for", "col"+j)
+                tr.appendChild td
+
+            if opts.table.rowTotals || colAttrs.length == 0
+                totalAggregator = pivotData.getAggregator([], [])
+                val = totalAggregator.value()
+                td = document.createElement("td")
+                td.className = "pvtGrandTotal"
+                td.textContent = totalAggregator.format(val)
+                td.setAttribute("data-value", val)
+                td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; font-weight: bold; background: #e6e6e6; color: #000; white-space: nowrap; min-width: 80px;"
+                if getClickHandler?
+                    td.onclick = getClickHandler(val, [], [])
+                tr.appendChild td
+
+            tfoot.appendChild tr
+            mainTable.appendChild tfoot
+
         createDataRow = (i, rowKey) ->
             tr = document.createElement("tr")
             tr.setAttribute("data-row-index", i)
@@ -2119,48 +2314,6 @@ callWithJQuery ($) ->
 
             return tr
 
-        createTotalsRow = ->
-            return unless opts.table.colTotals || rowAttrs.length == 0
-
-            tr = document.createElement("tr")
-            tr.className = "pvt-totals-row"
-            tr.style.cssText = "background: #f9f9f9; border-top: 2px solid #999; font-weight: bold;"
-
-            if opts.table.colTotals || rowAttrs.length == 0
-                th = document.createElement("th")
-                th.className = "pvtTotalLabel pvtColTotalLabel"
-                th.innerHTML = opts.localeStrings.totals
-                th.setAttribute("colspan", rowAttrs.length + (if colAttrs.length == 0 then 0 else 1))
-                th.style.cssText = "background: #e6e6e6; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap;"
-                tr.appendChild th
-
-            for own j, colKey of colKeys
-                totalAggregator = pivotData.getAggregator([], colKey)
-                val = totalAggregator.value()
-                td = document.createElement("td")
-                td.className = "pvtTotal colTotal"
-                td.textContent = totalAggregator.format(val)
-                td.setAttribute("data-value", val)
-                td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; font-weight: bold; background: #f9f9f9; color: #000; white-space: nowrap; min-width: 80px;"
-                if getClickHandler?
-                    td.onclick = getClickHandler(val, [], colKey)
-                td.setAttribute("data-for", "col"+j)
-                tr.appendChild td
-
-            if opts.table.rowTotals || colAttrs.length == 0
-                totalAggregator = pivotData.getAggregator([], [])
-                val = totalAggregator.value()
-                td = document.createElement("td")
-                td.className = "pvtGrandTotal"
-                td.textContent = totalAggregator.format(val)
-                td.setAttribute("data-value", val)
-                td.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: right; font-weight: bold; background: #e6e6e6; color: #000; white-space: nowrap; min-width: 80px;"
-                if getClickHandler?
-                    td.onclick = getClickHandler(val, [], [])
-                tr.appendChild td
-
-            return tr
-
         currentStartIndex = 0
         currentEndIndex = 0
 
@@ -2177,12 +2330,22 @@ callWithJQuery ($) ->
             visibleRows = Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize)
             endIndex = Math.min(totalRows, startIndex + visibleRows)
 
+            # Boundary check to prevent jitter
+            maxScrollTop = Math.max(0, (totalRows * rowHeight) - (containerHeight - headerHeight))
+            if scrollTop >= maxScrollTop
+                # If reached the end, fix endIndex at the maximum value
+                endIndex = totalRows
+                startIndex = Math.max(0, endIndex - visibleRows + bufferSize)
+
             return {startIndex, endIndex}
 
         updateVisibleRows = ->
-            {startIndex, endIndex} = calculateVisibleRange()
+            return if isUpdatingRows
 
+            {startIndex, endIndex} = calculateVisibleRange()
             return if startIndex == currentStartIndex and endIndex == currentEndIndex
+
+            isUpdatingRows = true
 
             callLifecycle('render-progress', (endIndex / totalRows) * 100, {
                 totalRows: totalRows
@@ -2199,7 +2362,6 @@ callWithJQuery ($) ->
                 mainTable.appendChild(tbody)
 
             tbody.innerHTML = ''
-
             rowHeight = opts.table.virtualization.rowHeight
 
             if startIndex > 0
@@ -2240,8 +2402,22 @@ callWithJQuery ($) ->
             currentStartIndex = startIndex
             currentEndIndex = endIndex
 
+            # Measure and apply column widths only during the first render
+            if not columnWidthsMeasured
+                setTimeout(->
+                    measureAndApplyColumnWidths()
+                    isUpdatingRows = false
+                , 10)
+            else
+                # Apply already measured column widths to new rows
+                setTimeout(->
+                    applyExistingColumnWidths()
+                    isUpdatingRows = false
+                , 5)
+
         setupScrollHandler = ->
             scrollTimeout = null
+
             container.addEventListener 'scroll', ->
                 clearTimeout(scrollTimeout) if scrollTimeout
                 scrollTimeout = setTimeout(updateVisibleRows, 16) # ~60fps
@@ -2249,29 +2425,15 @@ callWithJQuery ($) ->
         tbody = document.createElement('tbody')
         mainTable.appendChild(tbody)
 
+        totalColumns = calculateTotalColumns()
         buildHeaders()
+
+        # Add totals to the footer of the main table
+        if opts.table.colTotals
+            buildFooter()
 
         setupScrollHandler()
         updateVisibleRows()
-
-        if opts.table.colTotals
-            totalsTable = document.createElement("table")
-            totalsTable.className = "pvtTable pvt-totals-table"
-            totalsTable.style.cssText = """
-                border-collapse: collapse;
-                width: auto;
-                min-width: 100%;
-                table-layout: auto;
-                margin-top: 0;
-                border-top: none;
-            """
-
-            totalsTbody = document.createElement("tbody")
-            totalsRow = createTotalsRow()
-            if totalsRow
-                totalsTbody.appendChild(totalsRow)
-                totalsTable.appendChild(totalsTbody)
-                container.appendChild(totalsTable)
 
         callLifecycle('render-completed', 100, {
             totalRows: rowKeys.length
