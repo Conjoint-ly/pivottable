@@ -615,8 +615,8 @@
         this.sorted = false;
         // Async options
         this.asyncMode = (ref10 = opts.asyncMode) != null ? ref10 : false;
-        this.lifecycleCallback = (ref11 = opts.lifecycleCallback) != null ? ref11 : null;
-        this.progressInterval = (ref12 = opts.progressInterval) != null ? ref12 : 1000;
+        this.lifecycleCallback = (ref11 = opts.rendererOptions.lifecycleCallback) != null ? ref11 : null;
+        this.progressInterval = (ref12 = opts.rendererOptions.progressInterval) != null ? ref12 : 1000;
         this.aborted = false;
         this.startTime = null;
         this.processedRecords = 0;
@@ -949,11 +949,12 @@
         var c, callLifecycle, colAttrs, colKey, colKeys, colSpans, createDataRow, currentIndex, defaults, error, finishRendering, getClickHandler, i, j, precomputeSpans, processRowsBatch, r, ref, ref1, ref2, result, rowAttrs, rowKeys, rowSpans, shouldVirtualize, spanSize, tbody, th, thead, theadFragment, totalRows, tr, x;
         try {
           defaults = {
+            renderChunkSize: 100, // Размер чанка для рендеринга строк
+            lifecycleCallback: null,
             table: {
               clickCallback: null,
               rowTotals: true,
               colTotals: true,
-              renderChunkSize: 100, // Размер чанка для рендеринга строк
               virtualization: {
                 enabled: true,
                 rowHeight: 30,
@@ -965,8 +966,7 @@
             },
             localeStrings: {
               totals: "Totals"
-            },
-            lifecycleCallback: null
+            }
           };
           opts = $.extend(true, {}, defaults, opts);
           callLifecycle = function(stage, progress = 0, metadata = null) {
@@ -1218,7 +1218,7 @@
             if (currentIndex >= totalRows || aborted) {
               return;
             }
-            batchSize = Math.min(opts.table.renderChunkSize, totalRows - currentIndex);
+            batchSize = Math.min(opts.renderChunkSize, totalRows - currentIndex);
             endIndex = currentIndex + batchSize;
             fragment = document.createDocumentFragment();
             for (i = l = ref3 = currentIndex, ref4 = endIndex; (ref3 <= ref4 ? l < ref4 : l > ref4); i = ref3 <= ref4 ? ++l : --l) {
@@ -1588,7 +1588,7 @@
     Pivot Table core: create PivotData object and call Renderer on it
     */
     $.fn.pivot = function(input, inputOpts, locale = "en") {
-      var defaults, e, localeDefaults, localeStrings, opts, pivotData, ref, ref1, result, x;
+      var defaults, e, localeDefaults, localeStrings, opts, pivotData, result, x;
       if (locales[locale] == null) {
         locale = "en";
       }
@@ -1608,20 +1608,21 @@
         labels: {},
         derivedAttributes: {},
         renderer: pivotTableRenderer,
-        asyncMode: false,
-        lifecycleCallback: null,
-        progressInterval: 1000,
-        renderChunkSize: 25
+        asyncMode: false
       };
       localeStrings = $.extend(true, {}, locales.en.localeStrings, locales[locale].localeStrings);
       localeDefaults = {
         rendererOptions: {
           localeSettings: localeStrings,
-          labels: (ref = inputOpts.labels) != null ? ref : {},
+          labels: {},
           table: {
-            renderChunkSize: (ref1 = inputOpts.renderChunkSize) != null ? ref1 : 25
+            virtualization: {
+              enabled: false
+            }
           },
-          lifecycleCallback: inputOpts != null ? inputOpts.lifecycleCallback : void 0
+          progressInterval: 1000,
+          renderChunkSize: 25,
+          lifecycleCallback: null
         },
         localeStrings: localeStrings
       };
@@ -1645,7 +1646,7 @@
             x.pivotDataInstance = pivotData;
             // Wait for async data processing to complete
             checkDataReady = () => {
-              var e, func, isTableRenderer, name, ref2, ref3, rendererFunction, rendererName;
+              var e, func, isTableRenderer, name, ref, ref1, rendererFunction, rendererName;
               if (pivotData.dataReady || pivotData.aborted) {
                 if (pivotData.aborted) {
                   reject(new Error("Processing aborted"));
@@ -1659,12 +1660,12 @@
                   // If renderer is a string, resolve it to function
                   if (typeof opts.renderer === "string") {
                     rendererName = opts.renderer;
-                    rendererFunction = ((ref2 = opts.renderers) != null ? ref2[opts.renderer] : void 0) || renderers[opts.renderer];
+                    rendererFunction = ((ref = opts.renderers) != null ? ref[opts.renderer] : void 0) || renderers[opts.renderer];
                   } else if ($.isFunction(opts.renderer)) {
-                    ref3 = opts.renderers || renderers;
+                    ref1 = opts.renderers || renderers;
                     // Try to find the renderer name by comparing functions
-                    for (name in ref3) {
-                      func = ref3[name];
+                    for (name in ref1) {
+                      func = ref1[name];
                       if (func === opts.renderer) {
                         rendererName = name;
                         break;
@@ -1767,7 +1768,7 @@
     Pivot Table UI: calls Pivot Table core above with options set by user
     */
     $.fn.pivotUI = function(input, inputOpts, overwrite = false, locale = "en") {
-      var a, aggregator, attr, attrValues, c, calculateComplexity, colOrderArrow, controlsToolbar, defaults, e, existingOpts, i, initialRender, l, len1, len2, localeDefaults, localeStrings, materializedInput, n, opts, orderGroup, ordering, panelsGroup, pivotTable, recordsProcessed, ref, ref1, ref2, ref3, ref4, refresh, refreshButton, refreshDelayed, refreshGroup, renderer, rendererControl, responsive, rowOrderArrow, rulesVisibility, shownAttributes, shownInAggregators, shownInDragDrop, tr0, tr1, tr2, uiTable, unused, unusedAttrsVerticalAutoOverride, unusedVisibility, visible, x;
+      var a, aggregator, attr, attrValues, c, calculateComplexity, colOrderArrow, controlsToolbar, defaults, e, existingOpts, i, initialRender, l, len1, len2, localeDefaults, localeStrings, materializedInput, n, opts, orderGroup, ordering, panelsGroup, pivotTable, recordsProcessed, ref, ref1, ref2, ref3, refresh, refreshButton, refreshDelayed, refreshGroup, renderer, rendererControl, responsive, rowOrderArrow, rulesVisibility, shownAttributes, shownInAggregators, shownInDragDrop, tr0, tr1, tr2, uiTable, unused, unusedAttrsVerticalAutoOverride, unusedVisibility, visible, x;
       if (locales[locale] == null) {
         locale = "en";
       }
@@ -1801,18 +1802,16 @@
           return true;
         },
         sorters: {},
-        asyncMode: false,
-        lifecycleCallback: null,
-        progressInterval: 1000,
-        renderChunkSize: 25
+        asyncMode: false
       };
       localeStrings = $.extend(true, {}, locales.en.localeStrings, locales[locale].localeStrings);
       localeDefaults = {
         rendererOptions: {
           localeStrings,
-          table: {
-            renderChunkSize: (ref = inputOpts.renderChunkSize) != null ? ref : 25
-          }
+          lifecycleCallback: null,
+          progressInterval: 1000,
+          renderChunkSize: 25,
+          table: {}
         },
         localeStrings: localeStrings
       };
@@ -1829,7 +1828,7 @@
         materializedInput = [];
         recordsProcessed = 0;
         PivotData.forEachRecord(input, opts.derivedAttributes, function(record) {
-          var attr, base, ref1, value;
+          var attr, base, ref, value;
           if (!opts.filter(record)) {
             return;
           }
@@ -1844,7 +1843,7 @@
             }
           }
           for (attr in attrValues) {
-            value = (ref1 = record[attr]) != null ? ref1 : "null";
+            value = (ref = record[attr]) != null ? ref : "null";
             if ((base = attrValues[attr])[value] == null) {
               base[value] = 0;
             }
@@ -1864,9 +1863,9 @@
         renderer = $("<select>").addClass("pvtRenderer").appendTo(rendererControl).bind("change", function() {
           return refresh(); //capture reference
         });
-        ref1 = opts.renderers;
-        for (x in ref1) {
-          if (!hasProp.call(ref1, x)) continue;
+        ref = opts.renderers;
+        for (x in ref) {
+          if (!hasProp.call(ref, x)) continue;
           $("<option>").val(x).html(x).appendTo(renderer);
         }
         //axis list, including the double-click menu
@@ -1915,7 +1914,7 @@
           if (!hasProp.call(shownInDragDrop, i)) continue;
           attr = shownInDragDrop[i];
           (function(attr) {
-            var attrElem, checkContainer, closeFilterBox, controls, controlsButtons, filterItem, filterItemExcluded, finalButtons, hasExcludedItem, l, len1, placeholder, ref2, ref3, ref4, ref5, sorter, triangleLink, v, value, valueBody, valueCount, valueFooter, valueHeading, valueList, values;
+            var attrElem, checkContainer, closeFilterBox, controls, controlsButtons, filterItem, filterItemExcluded, finalButtons, hasExcludedItem, l, len1, placeholder, ref1, ref2, ref3, ref4, sorter, triangleLink, v, value, valueBody, valueCount, valueFooter, valueHeading, valueList, values;
             values = (function() {
               var results;
               results = [];
@@ -1942,7 +1941,7 @@
             valueList.append(valueFooter);
             valueHeading.append($("<h4>", {
               class: "panel-title"
-            }).append($("<span>").text((ref2 = opts.labels[attr]) != null ? ref2 : attr), $("<span>").addClass("count").text(`(${values.length})`)));
+            }).append($("<span>").text((ref1 = opts.labels[attr]) != null ? ref1 : attr), $("<span>").addClass("count").text(`(${values.length})`)));
             if (values.length > opts.menuLimit) {
               valueList.append($("<p>").html(opts.localeStrings.tooMany));
             } else {
@@ -1961,12 +1960,12 @@
                   filter = $(this).val().toLowerCase().trim();
                   accept_gen = function(prefix, accepted) {
                     return function(v) {
-                      var real_filter, ref3;
+                      var real_filter, ref2;
                       real_filter = filter.substring(prefix.length).trim();
                       if (real_filter.length === 0) {
                         return true;
                       }
-                      return ref3 = Math.sign(sorter(v.toLowerCase(), real_filter)), indexOf.call(accepted, ref3) >= 0;
+                      return ref2 = Math.sign(sorter(v.toLowerCase(), real_filter)), indexOf.call(accepted, ref2) >= 0;
                     };
                   };
                   accept = filter.indexOf(">=") === 0 ? accept_gen(">=", [1, 0]) : filter.indexOf("<=") === 0 ? accept_gen("<=", [-1, 0]) : filter.indexOf(">") === 0 ? accept_gen(">", [1]) : filter.indexOf("<") === 0 ? accept_gen("<", [-1]) : filter.indexOf("~") === 0 ? function(v) {
@@ -2012,9 +2011,9 @@
               checkContainer = $("<div>", {
                 class: "pvtCheckContainer"
               }).appendTo(valueBody);
-              ref3 = values.sort(getSort(opts.sorters, attr));
-              for (l = 0, len1 = ref3.length; l < len1; l++) {
-                value = ref3[l];
+              ref2 = values.sort(getSort(opts.sorters, attr));
+              for (l = 0, len1 = ref2.length; l < len1; l++) {
+                value = ref2[l];
                 valueCount = attrValues[attr][value];
                 filterItem = $("<label>");
                 filterItemExcluded = false;
@@ -2090,7 +2089,7 @@
                 top: top + 10
               }).show();
             });
-            attrElem = $("<li>").addClass(`axis_${i}`).append($("<span>").addClass('label label-default pvtAttr').attr("title", (ref5 = opts.labels[attr]) != null ? ref5 : attr).text((ref4 = opts.labels[attr]) != null ? ref4 : attr).data("attrName", attr).append(triangleLink));
+            attrElem = $("<li>").addClass(`axis_${i}`).append($("<span>").addClass('label label-default pvtAttr').attr("title", (ref4 = opts.labels[attr]) != null ? ref4 : attr).text((ref3 = opts.labels[attr]) != null ? ref3 : attr).data("attrName", attr).append(triangleLink));
             if (hasExcludedItem) {
               attrElem.addClass('pvtFilteredAttribute');
             }
@@ -2104,9 +2103,9 @@
         aggregator = $("<select>").addClass('pvtAggregator').bind("change", function() {
           return refresh(); //capture reference
         });
-        ref2 = opts.aggregators;
-        for (x in ref2) {
-          if (!hasProp.call(ref2, x)) continue;
+        ref1 = opts.aggregators;
+        for (x in ref1) {
+          if (!hasProp.call(ref1, x)) continue;
           aggregator.append($("<option>").val(x).html(x));
         }
         rendererControl.append(" ").append(aggregator);
@@ -2242,15 +2241,15 @@
         if (opts.controls.unused) {
           $(".pvtVals").attr("colspan", 2);
         }
-        ref3 = opts.cols;
+        ref2 = opts.cols;
         //set up the UI initial state as requested by moving elements around
-        for (l = 0, len1 = ref3.length; l < len1; l++) {
-          x = ref3[l];
+        for (l = 0, len1 = ref2.length; l < len1; l++) {
+          x = ref2[l];
           this.find(".pvtCols").append(this.find(`.axis_${$.inArray(x, shownInDragDrop)}`));
         }
-        ref4 = opts.rows;
-        for (n = 0, len2 = ref4.length; n < len2; n++) {
-          x = ref4[n];
+        ref3 = opts.rows;
+        for (n = 0, len2 = ref3.length; n < len2; n++) {
+          x = ref3[n];
           this.find(".pvtRows").append(this.find(`.axis_${$.inArray(x, shownInDragDrop)}`));
         }
         if (opts.aggregatorName != null) {
@@ -2266,50 +2265,50 @@
         //set up for refreshing
         // Function to calculate complexity heuristics
         calculateComplexity = (subopts) => {
-          var complexityScore, estimatedCols, estimatedRows, len3, len4, o, ref5, ref6, ref7, ref8, t, totalRecords, uniqueValues;
+          var complexityScore, estimatedCols, estimatedRows, len3, len4, o, ref4, ref5, ref6, ref7, t, totalRecords, uniqueValues;
           // Count unique values for each attribute
           uniqueValues = {};
           totalRecords = 0;
           // Count records and unique values
           PivotData.forEachRecord(materializedInput, subopts.derivedAttributes, (record) => {
-            var len3, len4, o, ref5, ref6, ref7, ref8, results, t;
+            var len3, len4, o, ref4, ref5, ref6, ref7, results, t;
             if (!subopts.filter(record)) {
               return;
             }
             totalRecords++;
-            ref5 = subopts.rows;
+            ref4 = subopts.rows;
             // Count unique values for row attributes
-            for (o = 0, len3 = ref5.length; o < len3; o++) {
-              attr = ref5[o];
+            for (o = 0, len3 = ref4.length; o < len3; o++) {
+              attr = ref4[o];
               if (uniqueValues[attr] == null) {
                 uniqueValues[attr] = new Set();
               }
-              uniqueValues[attr].add((ref6 = record[attr]) != null ? ref6 : "null");
+              uniqueValues[attr].add((ref5 = record[attr]) != null ? ref5 : "null");
             }
-            ref7 = subopts.cols;
+            ref6 = subopts.cols;
             // Count unique values for column attributes
             results = [];
-            for (t = 0, len4 = ref7.length; t < len4; t++) {
-              attr = ref7[t];
+            for (t = 0, len4 = ref6.length; t < len4; t++) {
+              attr = ref6[t];
               if (uniqueValues[attr] == null) {
                 uniqueValues[attr] = new Set();
               }
-              results.push(uniqueValues[attr].add((ref8 = record[attr]) != null ? ref8 : "null"));
+              results.push(uniqueValues[attr].add((ref7 = record[attr]) != null ? ref7 : "null"));
             }
             return results;
           });
           // Calculate estimated dimensions
           estimatedRows = 1;
-          ref5 = subopts.rows;
-          for (o = 0, len3 = ref5.length; o < len3; o++) {
-            attr = ref5[o];
-            estimatedRows *= ((ref6 = uniqueValues[attr]) != null ? ref6.size : void 0) || 1;
+          ref4 = subopts.rows;
+          for (o = 0, len3 = ref4.length; o < len3; o++) {
+            attr = ref4[o];
+            estimatedRows *= ((ref5 = uniqueValues[attr]) != null ? ref5.size : void 0) || 1;
           }
           estimatedCols = 1;
-          ref7 = subopts.cols;
-          for (t = 0, len4 = ref7.length; t < len4; t++) {
-            attr = ref7[t];
-            estimatedCols *= ((ref8 = uniqueValues[attr]) != null ? ref8.size : void 0) || 1;
+          ref6 = subopts.cols;
+          for (t = 0, len4 = ref6.length; t < len4; t++) {
+            attr = ref6[t];
+            estimatedCols *= ((ref7 = uniqueValues[attr]) != null ? ref7.size : void 0) || 1;
           }
           // Calculate complexity score (rough estimate)
           complexityScore = estimatedRows * estimatedCols;
@@ -2321,7 +2320,7 @@
           };
         };
         refreshDelayed = (first, forceRefresh = false) => {
-          var complexity, exclusions, inclusions, len3, newDropdown, numInputsToProcess, o, pivotPromise, pivotUIOptions, pvtUiCell, ref5, ref6, ref7, result, shouldProceed, subopts, t, unusedAttrsContainer, vals, wrapper;
+          var complexity, exclusions, inclusions, len3, newDropdown, numInputsToProcess, o, pivotPromise, pivotUIOptions, pvtUiCell, ref4, ref5, ref6, result, shouldProceed, subopts, t, unusedAttrsContainer, vals, wrapper;
           subopts = {
             derivedAttributes: opts.derivedAttributes,
             localeStrings: opts.localeStrings,
@@ -2330,9 +2329,10 @@
             labels: opts.labels,
             cols: [],
             rows: [],
-            dataClass: opts.dataClass
+            dataClass: opts.dataClass,
+            asyncMode: opts.asyncMode
           };
-          numInputsToProcess = (ref5 = opts.aggregators[aggregator.val()]([])().numInputs) != null ? ref5 : 0;
+          numInputsToProcess = (ref4 = opts.aggregators[aggregator.val()]([])().numInputs) != null ? ref4 : 0;
           vals = [];
           this.find(".pvtRows li span.pvtAttr").each(function() {
             return subopts.rows.push($(this).data("attrName"));
@@ -2353,13 +2353,13 @@
           });
           if (numInputsToProcess !== 0) {
             pvtUiCell = this.find(".pvtUiControls");
-            for (x = o = 0, ref6 = numInputsToProcess; (0 <= ref6 ? o < ref6 : o > ref6); x = 0 <= ref6 ? ++o : --o) {
+            for (x = o = 0, ref5 = numInputsToProcess; (0 <= ref5 ? o < ref5 : o > ref5); x = 0 <= ref5 ? ++o : --o) {
               newDropdown = $("<select>").addClass('pvtAttrDropdown').append($("<option>")).bind("change", function() {
                 return refresh();
               });
               for (t = 0, len3 = shownInAggregators.length; t < len3; t++) {
                 attr = shownInAggregators[t];
-                newDropdown.append($("<option>").val(attr).text((ref7 = opts.labels[attr]) != null ? ref7 : attr));
+                newDropdown.append($("<option>").val(attr).text((ref6 = opts.labels[attr]) != null ? ref6 : attr));
               }
               pvtUiCell.append(" ").append($("<span>", {
                 class: "pvtAttrDropdownBy"
@@ -2406,13 +2406,13 @@
             }
           });
           subopts.filter = function(record) {
-            var excludedItems, k, ref8, ref9;
+            var excludedItems, k, ref7, ref8;
             if (!opts.filter(record)) {
               return false;
             }
             for (k in exclusions) {
               excludedItems = exclusions[k];
-              if (ref8 = "" + ((ref9 = record[k]) != null ? ref9 : 'null'), indexOf.call(excludedItems, ref8) >= 0) {
+              if (ref7 = "" + ((ref8 = record[k]) != null ? ref8 : 'null'), indexOf.call(excludedItems, ref7) >= 0) {
                 return false;
               }
             }
@@ -2439,11 +2439,7 @@
           }
           // Hide refresh button if calculation proceeds
           this.find(".pvtRefreshBtn").hide();
-          // Add async support to subopts
-          subopts.asyncMode = opts.asyncMode;
-          subopts.progressInterval = opts.progressInterval;
-          subopts.lifecycleCallback = opts.lifecycleCallback;
-          if (opts.asyncMode) {
+          if (subopts.asyncMode) {
             // Show loading indicator
             pivotTable.html("<div class='pvt-loading' style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-spinner fa-spin'></i><br>Processing data...</div>");
             // Store pivot data instance for abort functionality
@@ -2701,7 +2697,7 @@
           rowTotals: true,
           colTotals: true,
           virtualization: {
-            enabled: true,
+            enabled: false,
             rowHeight: 30,
             bufferSize: 5, // количество строк буфера сверху и снизу
             containerHeight: 400 // высота контейнера таблицы

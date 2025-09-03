@@ -323,8 +323,8 @@ callWithJQuery ($) ->
 
             # Async options
             @asyncMode = opts.asyncMode ? false
-            @lifecycleCallback = opts.lifecycleCallback ? null
-            @progressInterval = opts.progressInterval ? 1000
+            @lifecycleCallback = opts.rendererOptions.lifecycleCallback ? null
+            @progressInterval = opts.rendererOptions.progressInterval ? 1000
             @aborted = false
             @startTime = null
             @processedRecords = 0
@@ -537,11 +537,12 @@ callWithJQuery ($) ->
         return new Promise (resolve, reject) ->
             try
                 defaults =
+                    renderChunkSize: 100  # Размер чанка для рендеринга строк
+                    lifecycleCallback: null
                     table:
                         clickCallback: null
                         rowTotals: true
                         colTotals: true
-                        renderChunkSize: 100  # Размер чанка для рендеринга строк
                         virtualization:
                             enabled: true
                             rowHeight: 30
@@ -550,7 +551,6 @@ callWithJQuery ($) ->
                             headerHeight: 60
                             threshold: 1000  # Использовать виртуализацию для таблиц больше 1000 строк
                     localeStrings: totals: "Totals"
-                    lifecycleCallback: null
 
                 opts = $.extend(true, {}, defaults, opts)
 
@@ -754,7 +754,7 @@ callWithJQuery ($) ->
                 processRowsBatch = ->
                     return if currentIndex >= totalRows or aborted
 
-                    batchSize = Math.min(opts.table.renderChunkSize, totalRows - currentIndex)
+                    batchSize = Math.min(opts.renderChunkSize, totalRows - currentIndex)
                     endIndex = currentIndex + batchSize
 
                     fragment = document.createDocumentFragment()
@@ -1077,19 +1077,20 @@ callWithJQuery ($) ->
             derivedAttributes: {}
             renderer: pivotTableRenderer
             asyncMode: false
-            lifecycleCallback: null
-            progressInterval: 1000
-            renderChunkSize: 25
 
         localeStrings = $.extend(true, {}, locales.en.localeStrings, locales[locale].localeStrings)
         localeDefaults =
             rendererOptions: {
                 localeSettings: localeStrings,
-                labels: inputOpts.labels ? {},
+                labels: {},
                 table: {
-                    renderChunkSize: inputOpts.renderChunkSize ? 25
+                    virtualization: {
+                        enabled: false
+                    }
                 },
-                lifecycleCallback: inputOpts?.lifecycleCallback
+                progressInterval: 1000,
+                renderChunkSize: 25,
+                lifecycleCallback: null
             }
             localeStrings: localeStrings
 
@@ -1234,17 +1235,15 @@ callWithJQuery ($) ->
             filter: -> true
             sorters: {}
             asyncMode: false
-            lifecycleCallback: null
-            progressInterval: 1000
-            renderChunkSize: 25
 
         localeStrings = $.extend(true, {}, locales.en.localeStrings, locales[locale].localeStrings)
         localeDefaults =
             rendererOptions: {
                 localeStrings,
-                table: {
-                    renderChunkSize: inputOpts.renderChunkSize ? 25
-                }
+                lifecycleCallback: null
+                progressInterval: 1000
+                renderChunkSize: 25
+                table: {}
             }
             localeStrings: localeStrings
 
@@ -1614,6 +1613,7 @@ callWithJQuery ($) ->
                     labels: opts.labels
                     cols: [], rows: []
                     dataClass: opts.dataClass
+                    asyncMode: opts.asyncMode
 
                 numInputsToProcess = opts.aggregators[aggregator.val()]([])().numInputs ? 0
                 vals = []
@@ -1701,12 +1701,7 @@ callWithJQuery ($) ->
                 # Hide refresh button if calculation proceeds
                 @find(".pvtRefreshBtn").hide()
 
-                # Add async support to subopts
-                subopts.asyncMode = opts.asyncMode
-                subopts.progressInterval = opts.progressInterval
-                subopts.lifecycleCallback = opts.lifecycleCallback
-
-                if opts.asyncMode
+                if subopts.asyncMode
                     # Show loading indicator
                     pivotTable.html("<div class='pvt-loading' style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-spinner fa-spin'></i><br>Processing data...</div>")
 
@@ -1918,7 +1913,7 @@ callWithJQuery ($) ->
                 rowTotals: true
                 colTotals: true
                 virtualization:
-                    enabled: true
+                    enabled: false
                     rowHeight: 30
                     bufferSize: 5  # количество строк буфера сверху и снизу
                     containerHeight: 400  # высота контейнера таблицы

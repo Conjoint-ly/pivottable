@@ -460,9 +460,10 @@
                 vals: ["Sales"],
                 aggregatorName: "Sum",
                 asyncMode,
-                progressInterval: 2000,
                 rendererName: 'Table',
                 rendererOptions: {
+                    progressInterval: 2000,
+                    lifecycleCallback,
                     table: {
                         virtualization: {
                             enabled: rendererName === 'Virtualized Table',
@@ -474,7 +475,6 @@
                         }
                     }
                 },
-                lifecycleCallback
             };
 
             try {
