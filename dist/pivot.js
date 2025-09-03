@@ -2388,7 +2388,6 @@
           subopts.renderer = opts.renderers[renderer.val()];
           subopts.rowOrder = rowOrderArrow.data("order");
           subopts.colOrder = colOrderArrow.data("order");
-          
           // Передаем ссылку на UI элемент для автоопределения высоты
           subopts.rendererOptions = $.extend(true, {}, opts.rendererOptions);
           subopts.rendererOptions.pivotUIElement = this[0];
@@ -2725,7 +2724,6 @@
       if (opts.table.virtualization.autoHeight) {
         // Пытаемся найти родительский элемент pvtUi
         pivotUIElement = opts.pivotUIElement;
-        
         // Если не передан через опции, ищем в DOM
         if (!pivotUIElement && typeof $ !== 'undefined') {
           pivotUIElement = $(".pvtUi").first()[0];
@@ -2733,12 +2731,10 @@
         if (pivotUIElement) {
           // Определяем доступную высоту
           pivotUIHeight = pivotUIElement.clientHeight || pivotUIElement.offsetHeight;
-          
           // Если высота еще не определилась (элемент не отрисован), используем viewport
           if (pivotUIHeight <= 0 && typeof window !== 'undefined') {
             pivotUIHeight = window.innerHeight || 600;
           }
-          
           // Находим таблицу внутри UI для более точного расчета
           pivotTableElement = null;
           if (typeof $ !== 'undefined') {
@@ -2757,7 +2753,6 @@
             // Приблизительный расчет: контролы + отступы
             usedHeight = 120;
           }
-          
           // Вычисляем доступную высоту
           availableHeight = Math.max(200, pivotUIHeight - usedHeight);
           opts.table.virtualization.containerHeight = availableHeight;
@@ -2821,6 +2816,12 @@ border: 1px solid #ccc;
 background: white;`;
       mainTable = document.createElement("table");
       mainTable.className = "pvtTable pvt-virtualized-table";
+      // Добавляем CSS правила для предотвращения сбоев layout
+      // mainTable.style.cssText = """
+      //     table-layout: fixed;
+      //     width: 100%;
+      //     border-collapse: collapse;
+      // """
       container.appendChild(mainTable);
       // Variables for synchronizing column widths
       columnWidths = [];
@@ -2850,11 +2851,29 @@ background: white;`;
           };
         };
       }
-      spanSize = function(arr, i, j) {
-        var l, len, n, noDraw, ref, ref1, stop, x;
-        if (i !== 0) {
+      spanSize = function(arr, i, j, virtualStartIndex = 0) {
+        var l, len, n, noDraw, o, ref, ref1, ref2, stop, x;
+        // В виртуализированном режиме нужно учитывать, что предыдущие строки могут быть не отрисованы
+        // Если это первая видимая строка в виртуализированном окне, всегда показываем заголовки
+        if (i === virtualStartIndex) {
+          len = 1;
+          while (i + len < arr.length) {
+            stop = false;
+            for (x = l = 0, ref = j; (0 <= ref ? l <= ref : l >= ref); x = 0 <= ref ? ++l : --l) {
+              if (arr[i][x] !== arr[i + len][x]) {
+                stop = true;
+              }
+            }
+            if (stop) {
+              break;
+            }
+            len++;
+          }
+          return len;
+        }
+        if (i !== 0 && i > virtualStartIndex) {
           noDraw = true;
-          for (x = l = 0, ref = j; (0 <= ref ? l <= ref : l >= ref); x = 0 <= ref ? ++l : --l) {
+          for (x = n = 0, ref1 = j; (0 <= ref1 ? n <= ref1 : n >= ref1); x = 0 <= ref1 ? ++n : --n) {
             if (arr[i - 1][x] !== arr[i][x]) {
               noDraw = false;
             }
@@ -2866,7 +2885,7 @@ background: white;`;
         len = 0;
         while (i + len < arr.length) {
           stop = false;
-          for (x = n = 0, ref1 = j; (0 <= ref1 ? n <= ref1 : n >= ref1); x = 0 <= ref1 ? ++n : --n) {
+          for (x = o = 0, ref2 = j; (0 <= ref2 ? o <= ref2 : o >= ref2); x = 0 <= ref2 ? ++o : --o) {
             if (arr[i][x] !== arr[i + len][x]) {
               stop = true;
             }
@@ -2929,7 +2948,9 @@ background: white;`;
         if (columnWidths.length === 0) {
           return;
         }
-        return applyWidthsToDataRows();
+        applyWidthsToDataRows();
+        // Также повторно применяем ширины к заголовкам для устранения сбоев
+        return applyWidthsToHeaders();
       };
       // Apply widths to all sections of the table
       applyWidthsToAllSections = function() {
@@ -2956,6 +2977,8 @@ background: white;`;
             for (i = n = 0, len2 = cells.length; n < len2; i = ++n) {
               cell = cells[i];
               if (columnWidths[i] != null) {
+                // Используем !important для предотвращения сбоев layout при виртуализации
+                // cell.style.cssText = "#{cell.style.cssText}; width: #{columnWidths[i]}px !important; min-width: #{columnWidths[i]}px !important; max-width: #{columnWidths[i]}px !important;"
                 cell.style.width = `${columnWidths[i]}px`;
                 cell.style.minWidth = `${columnWidths[i]}px`;
                 results1.push(cell.style.maxWidth = `${columnWidths[i]}px`);
@@ -2996,6 +3019,8 @@ background: white;`;
                 for (i = o = 0, ref = numRowHeaders; (0 <= ref ? o < ref : o > ref); i = 0 <= ref ? ++o : --o) {
                   totalRowHeaderWidth += columnWidths[i] || 100;
                 }
+                // Принудительно применяем стиль для предотвращения сбоев layout
+                // cell.style.cssText = "#{cell.style.cssText}; width: #{totalRowHeaderWidth}px !important; min-width: #{totalRowHeaderWidth}px !important; max-width: #{totalRowHeaderWidth}px !important;"
                 cell.style.width = `${totalRowHeaderWidth}px`;
                 cell.style.minWidth = `${totalRowHeaderWidth}px`;
                 results1.push(cell.style.maxWidth = `${totalRowHeaderWidth}px`);
@@ -3003,6 +3028,7 @@ background: white;`;
                 if (dataColumnIndex < numRowHeaders) {
                   // Column rows attributes
                   width = columnWidths[dataColumnIndex] || 100;
+                  // cell.style.cssText = "#{cell.style.cssText}; width: #{width}px !important; min-width: #{width}px !important; max-width: #{width}px !important;"
                   cell.style.width = `${width}px`;
                   cell.style.minWidth = `${width}px`;
                   cell.style.maxWidth = `${width}px`;
@@ -3013,6 +3039,7 @@ background: white;`;
                   for (i = t = ref1 = numRowHeaders, ref2 = numRowHeaders + numDataColumns; (ref1 <= ref2 ? t < ref2 : t > ref2); i = ref1 <= ref2 ? ++t : --t) {
                     totalDataWidth += columnWidths[i] || 80;
                   }
+                  // cell.style.cssText = "#{cell.style.cssText}; width: #{totalDataWidth}px !important; min-width: #{totalDataWidth}px !important; max-width: #{totalDataWidth}px !important;"
                   cell.style.width = `${totalDataWidth}px`;
                   cell.style.minWidth = `${totalDataWidth}px`;
                   results1.push(cell.style.maxWidth = `${totalDataWidth}px`);
@@ -3022,6 +3049,7 @@ background: white;`;
                 actualColumnIndex = numRowHeaders + dataColumnIndex;
                 if (colspan === 1) {
                   width = columnWidths[actualColumnIndex] || 80;
+                  // cell.style.cssText = "#{cell.style.cssText}; width: #{width}px !important; min-width: #{width}px !important; max-width: #{width}px !important;"
                   cell.style.width = `${width}px`;
                   cell.style.minWidth = `${width}px`;
                   cell.style.maxWidth = `${width}px`;
@@ -3032,6 +3060,7 @@ background: white;`;
                   for (i = u = 0, ref3 = colspan; (0 <= ref3 ? u < ref3 : u > ref3); i = 0 <= ref3 ? ++u : --u) {
                     totalWidth += columnWidths[actualColumnIndex + i] || 80;
                   }
+                  // cell.style.cssText = "#{cell.style.cssText}; width: #{totalWidth}px !important; min-width: #{totalWidth}px !important; max-width: #{totalWidth}px !important;"
                   cell.style.width = `${totalWidth}px`;
                   cell.style.minWidth = `${totalWidth}px`;
                   cell.style.maxWidth = `${totalWidth}px`;
@@ -3041,6 +3070,7 @@ background: white;`;
                 if (hasTotalColumn) {
                   totalColumnIndex = numRowHeaders + numDataColumns;
                   width = columnWidths[totalColumnIndex] || 80;
+                  // cell.style.cssText = "#{cell.style.cssText}; width: #{width}px !important; min-width: #{width}px !important; max-width: #{width}px !important;"
                   cell.style.width = `${width}px`;
                   cell.style.minWidth = `${width}px`;
                   results1.push(cell.style.maxWidth = `${width}px`);
@@ -3071,6 +3101,8 @@ background: white;`;
         for (i = l = 0, len1 = cells.length; l < len1; i = ++l) {
           cell = cells[i];
           if (columnWidths[i] != null) {
+            // Используем !important для предотвращения сбоев layout
+            // cell.style.cssText = "#{cell.style.cssText}; width: #{columnWidths[i]}px !important; min-width: #{columnWidths[i]}px !important; max-width: #{columnWidths[i]}px !important;"
             cell.style.width = `${columnWidths[i]}px`;
             cell.style.minWidth = `${columnWidths[i]}px`;
             results.push(cell.style.maxWidth = `${columnWidths[i]}px`);
@@ -3196,7 +3228,7 @@ background: white;`;
         tfoot.appendChild(tr);
         return mainTable.appendChild(tfoot);
       };
-      createDataRow = function(i, rowKey) {
+      createDataRow = function(i, rowKey, virtualStartIndex = 0) {
         var aggregator, colKey, j, td, th, totalAggregator, tr, txt, val, x;
         tr = document.createElement("tr");
         tr.setAttribute("data-row-index", i);
@@ -3204,7 +3236,7 @@ background: white;`;
         for (j in rowKey) {
           if (!hasProp.call(rowKey, j)) continue;
           txt = rowKey[j];
-          x = spanSize(rowKeys, parseInt(i), parseInt(j));
+          x = spanSize(rowKeys, parseInt(i), parseInt(j), virtualStartIndex);
           if (x !== -1) {
             th = document.createElement("th");
             th.className = "pvtRowLabel";
@@ -3310,7 +3342,7 @@ background: transparent;`;
         for (i = l = ref = startIndex, ref1 = endIndex; (ref <= ref1 ? l < ref1 : l > ref1); i = ref <= ref1 ? ++l : --l) {
           if (i < rowKeys.length) {
             rowKey = rowKeys[i];
-            row = createDataRow(i, rowKey);
+            row = createDataRow(i, rowKey, startIndex);
             tbody.appendChild(row);
           }
         }

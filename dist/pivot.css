@@ -101,7 +101,7 @@
 }
 
 .pvt-virtualized-container tfoot {
-	position: sticky;
+	/* position: sticky; */
 	bottom: 0;
 	background: white;
 	z-index: 10;

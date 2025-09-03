@@ -1664,7 +1664,7 @@ callWithJQuery ($) ->
                 subopts.renderer = opts.renderers[renderer.val()]
                 subopts.rowOrder = rowOrderArrow.data("order")
                 subopts.colOrder = colOrderArrow.data("order")
-                
+
                 # Передаем ссылку на UI элемент для автоопределения высоты
                 subopts.rendererOptions = $.extend(true, {}, opts.rendererOptions)
                 subopts.rendererOptions.pivotUIElement = this[0]
@@ -1939,24 +1939,24 @@ callWithJQuery ($) ->
         if opts.table.virtualization.autoHeight
             # Пытаемся найти родительский элемент pvtUi
             pivotUIElement = opts.pivotUIElement
-            
+
             # Если не передан через опции, ищем в DOM
             if not pivotUIElement and typeof $ != 'undefined'
                 pivotUIElement = $(".pvtUi").first()[0]
-            
+
             if pivotUIElement
                 # Определяем доступную высоту
                 pivotUIHeight = pivotUIElement.clientHeight || pivotUIElement.offsetHeight
-                
+
                 # Если высота еще не определилась (элемент не отрисован), используем viewport
                 if pivotUIHeight <= 0 and typeof window != 'undefined'
                     pivotUIHeight = window.innerHeight || 600
-                
+
                 # Находим таблицу внутри UI для более точного расчета
                 pivotTableElement = null
                 if typeof $ != 'undefined'
                     pivotTableElement = $(pivotUIElement).find('.pvtTable, .pvtRendererArea').first()[0]
-                
+
                 if pivotTableElement
                     # Определяем высоту области для таблицы
                     if pivotTableElement.getBoundingClientRect
@@ -1968,7 +1968,7 @@ callWithJQuery ($) ->
                 else
                     # Приблизительный расчет: контролы + отступы
                     usedHeight = 120
-                
+
                 # Вычисляем доступную высоту
                 availableHeight = Math.max(200, pivotUIHeight - usedHeight)
                 opts.table.virtualization.containerHeight = availableHeight
@@ -2032,6 +2032,12 @@ callWithJQuery ($) ->
 
         mainTable = document.createElement("table")
         mainTable.className = "pvtTable pvt-virtualized-table"
+        # Добавляем CSS правила для предотвращения сбоев layout
+        # mainTable.style.cssText = """
+        #     table-layout: fixed;
+        #     width: 100%;
+        #     border-collapse: collapse;
+        # """
 
         container.appendChild(mainTable)
 
@@ -2048,8 +2054,20 @@ callWithJQuery ($) ->
                 filters[attr] = rowValues[i] for own i, attr of rowAttrs when rowValues[i]?
                 return (e) -> opts.table.clickCallback(e, value, filters, pivotData)
 
-        spanSize = (arr, i, j) ->
-            if i != 0
+        spanSize = (arr, i, j, virtualStartIndex = 0) ->
+            # В виртуализированном режиме нужно учитывать, что предыдущие строки могут быть не отрисованы
+            # Если это первая видимая строка в виртуализированном окне, всегда показываем заголовки
+            if i == virtualStartIndex
+                len = 1
+                while i+len < arr.length
+                    stop = false
+                    for x in [0..j]
+                        stop = true if arr[i][x] != arr[i+len][x]
+                    break if stop
+                    len++
+                return len
+
+            if i != 0 and i > virtualStartIndex
                 noDraw = true
                 for x in [0..j]
                     if arr[i-1][x] != arr[i][x]
@@ -2110,6 +2128,8 @@ callWithJQuery ($) ->
         applyExistingColumnWidths = ->
             return if columnWidths.length == 0
             applyWidthsToDataRows()
+            # Также повторно применяем ширины к заголовкам для устранения сбоев
+            applyWidthsToHeaders()
 
         # Apply widths to all sections of the table
         applyWidthsToAllSections = ->
@@ -2127,6 +2147,8 @@ callWithJQuery ($) ->
                 cells = dataRow.querySelectorAll('th, td')
                 for cell, i in cells
                     if columnWidths[i]?
+                        # Используем !important для предотвращения сбоев layout при виртуализации
+                        # cell.style.cssText = "#{cell.style.cssText}; width: #{columnWidths[i]}px !important; min-width: #{columnWidths[i]}px !important; max-width: #{columnWidths[i]}px !important;"
                         cell.style.width = "#{columnWidths[i]}px"
                         cell.style.minWidth = "#{columnWidths[i]}px"
                         cell.style.maxWidth = "#{columnWidths[i]}px"
@@ -2153,6 +2175,8 @@ callWithJQuery ($) ->
                         totalRowHeaderWidth = 0
                         for i in [0...numRowHeaders]
                             totalRowHeaderWidth += columnWidths[i] || 100
+                        # Принудительно применяем стиль для предотвращения сбоев layout
+                        # cell.style.cssText = "#{cell.style.cssText}; width: #{totalRowHeaderWidth}px !important; min-width: #{totalRowHeaderWidth}px !important; max-width: #{totalRowHeaderWidth}px !important;"
                         cell.style.width = "#{totalRowHeaderWidth}px"
                         cell.style.minWidth = "#{totalRowHeaderWidth}px"
                         cell.style.maxWidth = "#{totalRowHeaderWidth}px"
@@ -2161,6 +2185,7 @@ callWithJQuery ($) ->
                         if dataColumnIndex < numRowHeaders
                             # Column rows attributes
                             width = columnWidths[dataColumnIndex] || 100
+                            # cell.style.cssText = "#{cell.style.cssText}; width: #{width}px !important; min-width: #{width}px !important; max-width: #{width}px !important;"
                             cell.style.width = "#{width}px"
                             cell.style.minWidth = "#{width}px"
                             cell.style.maxWidth = "#{width}px"
@@ -2170,6 +2195,7 @@ callWithJQuery ($) ->
                             totalDataWidth = 0
                             for i in [numRowHeaders...numRowHeaders + numDataColumns]
                                 totalDataWidth += columnWidths[i] || 80
+                            # cell.style.cssText = "#{cell.style.cssText}; width: #{totalDataWidth}px !important; min-width: #{totalDataWidth}px !important; max-width: #{totalDataWidth}px !important;"
                             cell.style.width = "#{totalDataWidth}px"
                             cell.style.minWidth = "#{totalDataWidth}px"
                             cell.style.maxWidth = "#{totalDataWidth}px"
@@ -2179,6 +2205,7 @@ callWithJQuery ($) ->
                         actualColumnIndex = numRowHeaders + dataColumnIndex
                         if colspan == 1
                             width = columnWidths[actualColumnIndex] || 80
+                            # cell.style.cssText = "#{cell.style.cssText}; width: #{width}px !important; min-width: #{width}px !important; max-width: #{width}px !important;"
                             cell.style.width = "#{width}px"
                             cell.style.minWidth = "#{width}px"
                             cell.style.maxWidth = "#{width}px"
@@ -2188,6 +2215,7 @@ callWithJQuery ($) ->
                             totalWidth = 0
                             for i in [0...colspan]
                                 totalWidth += columnWidths[actualColumnIndex + i] || 80
+                            # cell.style.cssText = "#{cell.style.cssText}; width: #{totalWidth}px !important; min-width: #{totalWidth}px !important; max-width: #{totalWidth}px !important;"
                             cell.style.width = "#{totalWidth}px"
                             cell.style.minWidth = "#{totalWidth}px"
                             cell.style.maxWidth = "#{totalWidth}px"
@@ -2197,6 +2225,7 @@ callWithJQuery ($) ->
                         if hasTotalColumn
                             totalColumnIndex = numRowHeaders + numDataColumns
                             width = columnWidths[totalColumnIndex] || 80
+                            # cell.style.cssText = "#{cell.style.cssText}; width: #{width}px !important; min-width: #{width}px !important; max-width: #{width}px !important;"
                             cell.style.width = "#{width}px"
                             cell.style.minWidth = "#{width}px"
                             cell.style.maxWidth = "#{width}px"
@@ -2212,9 +2241,12 @@ callWithJQuery ($) ->
 
             for cell, i in cells
                 if columnWidths[i]?
+                    # Используем !important для предотвращения сбоев layout
+                    # cell.style.cssText = "#{cell.style.cssText}; width: #{columnWidths[i]}px !important; min-width: #{columnWidths[i]}px !important; max-width: #{columnWidths[i]}px !important;"
                     cell.style.width = "#{columnWidths[i]}px"
                     cell.style.minWidth = "#{columnWidths[i]}px"
                     cell.style.maxWidth = "#{columnWidths[i]}px"
+
 
         buildHeaders = ->
             thead = document.createElement("thead")
@@ -2321,13 +2353,13 @@ callWithJQuery ($) ->
             tfoot.appendChild tr
             mainTable.appendChild tfoot
 
-        createDataRow = (i, rowKey) ->
+        createDataRow = (i, rowKey, virtualStartIndex = 0) ->
             tr = document.createElement("tr")
             tr.setAttribute("data-row-index", i)
             tr.style.height = "#{opts.table.virtualization.rowHeight}px"
 
             for own j, txt of rowKey
-                x = spanSize(rowKeys, parseInt(i), parseInt(j))
+                x = spanSize(rowKeys, parseInt(i), parseInt(j), virtualStartIndex)
                 if x != -1
                     th = document.createElement("th")
                     th.className = "pvtRowLabel"
@@ -2432,7 +2464,7 @@ callWithJQuery ($) ->
             for i in [startIndex...endIndex]
                 if i < rowKeys.length
                     rowKey = rowKeys[i]
-                    row = createDataRow(i, rowKey)
+                    row = createDataRow(i, rowKey, startIndex)
                     tbody.appendChild(row)
 
             remainingRows = totalRows - endIndex
