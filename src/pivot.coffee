@@ -585,8 +585,7 @@ callWithJQuery ($) ->
 
                 # Проверяем, нужна ли виртуализация
                 totalRows = pivotData.getRowKeys().length
-                shouldVirtualize = opts.table.virtualization.enabled and
-                                 totalRows > opts.table.virtualization.threshold
+                shouldVirtualize = opts.table.virtualization.enabled
 
                 callLifecycle('render-started', 0, {
                     totalRows: totalRows
