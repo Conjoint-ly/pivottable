@@ -581,7 +581,7 @@ callWithJQuery ($) ->
                             opts.table.virtualization = opts.table.virtualization ? {}
                             opts.table.virtualization.enabled = enabled
 
-                    lifecycleCallback(data, abortFn, toggleVirtualizationFn)
+                    opts.lifecycleCallback(data, abortFn, toggleVirtualizationFn)
 
                 # Проверяем, нужна ли виртуализация
                 totalRows = pivotData.getRowKeys().length

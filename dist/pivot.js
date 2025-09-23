@@ -1001,7 +1001,7 @@
                 return opts.table.virtualization.enabled = enabled;
               };
             }
-            return lifecycleCallback(data, abortFn, toggleVirtualizationFn);
+            return opts.lifecycleCallback(data, abortFn, toggleVirtualizationFn);
           };
           // Проверяем, нужна ли виртуализация
           totalRows = pivotData.getRowKeys().length;
