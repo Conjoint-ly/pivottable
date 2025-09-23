@@ -585,13 +585,14 @@ callWithJQuery ($) ->
 
                 # Проверяем, нужна ли виртуализация
                 totalRows = pivotData.getRowKeys().length
-                shouldVirtualize = opts.table.virtualization.enabled
 
                 callLifecycle('render-started', 0, {
                     totalRows: totalRows
                     totalCols: pivotData.getColKeys().length,
-                    isVirtualized: shouldVirtualize
+                    isVirtualized: opts.table.virtualization.enabled
                 })
+
+                shouldVirtualize = opts.table.virtualization.enabled
 
                 return resolve($("<div>").text("Rendering aborted by user")) if aborted
 
