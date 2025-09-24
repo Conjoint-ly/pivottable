@@ -2700,7 +2700,7 @@
       return this;
     };
     return pivotTableRendererVirtualized = function(pivotData, opts) {
-      var aborted, applyExistingColumnWidths, applyWidthsToAllSections, applyWidthsToDataRows, applyWidthsToFooter, applyWidthsToHeaders, availableHeight, buildFooter, buildHeaders, calculateTotalColumns, calculateVisibleRange, callLifecycle, colAttrs, colKeys, columnWidths, columnWidthsMeasured, container, createDataRow, currentEndIndex, currentStartIndex, defaults, getClickHandler, isUpdatingRows, mainTable, measureAndApplyColumnWidths, pivotTableElement, pivotUIElement, pivotUIHeight, rowAttrs, rowKeys, setupScrollHandler, shouldVirtualize, spanSize, startTime, tableAreaTop, tbody, totalColumns, totalRows, uiAreaTop, updateVisibleRows, usedHeight;
+      var aborted, applyExistingColumnWidths, applyWidthsToAllSections, applyWidthsToDataRows, applyWidthsToFooter, applyWidthsToHeaders, availableHeight, bufferSize, buildFooter, buildHeaders, calculateTotalColumns, calculateVisibleRange, callLifecycle, colAttrs, colKeys, columnWidths, columnWidthsMeasured, container, containerHeight, createDataRow, currentEndIndex, currentStartIndex, defaults, estimatedVisibleRows, getClickHandler, headerHeight, isUpdatingRows, mainTable, measureAndApplyColumnWidths, pivotTableElement, pivotUIElement, pivotUIHeight, rowAttrs, rowHeight, rowKeys, setupScrollHandler, shouldVirtualize, spanSize, startTime, tableAreaTop, tbody, totalColumns, totalRows, uiAreaTop, updateVisibleRows, usedHeight;
       defaults = {
         table: {
           clickCallback: null,
@@ -2795,10 +2795,21 @@
       rowKeys = pivotData.getRowKeys();
       colKeys = pivotData.getColKeys();
       totalRows = rowKeys.length;
+      // Calculate estimated visible rows if virtualization is enabled
+      estimatedVisibleRows = totalRows;
+      if (opts.table.virtualization.enabled) {
+        containerHeight = opts.table.virtualization.containerHeight || 500;
+        rowHeight = opts.table.virtualization.rowHeight || 30;
+        bufferSize = opts.table.virtualization.bufferSize || 5;
+        headerHeight = 50; // estimated header height
+        // Formula from calculateVisibleRange: Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize)
+        estimatedVisibleRows = Math.min(totalRows, Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize));
+      }
       callLifecycle('render-started', 0, {
         totalRows: totalRows,
         totalCols: colKeys.length,
-        domElements: 0
+        domElements: 0,
+        estimatedVisibleRows: estimatedVisibleRows
       });
       if (aborted) {
         return;
@@ -3283,7 +3294,7 @@ background: white;`;
       currentStartIndex = 0;
       currentEndIndex = 0;
       calculateVisibleRange = function() {
-        var adjustedScrollTop, bufferSize, containerHeight, endIndex, headerHeight, maxScrollTop, ref, rowHeight, scrollTop, startIndex, visibleRows;
+        var adjustedScrollTop, endIndex, maxScrollTop, ref, scrollTop, startIndex, visibleRows;
         scrollTop = container.scrollTop;
         containerHeight = opts.table.virtualization.containerHeight;
         rowHeight = opts.table.virtualization.rowHeight;
@@ -3303,7 +3314,7 @@ background: white;`;
         return {startIndex, endIndex};
       };
       updateVisibleRows = function() {
-        var bottomSpacer, endIndex, i, l, ref, ref1, remainingRows, row, rowHeight, rowKey, spacerTd, startIndex, tbody, topSpacer;
+        var bottomSpacer, endIndex, i, l, ref, ref1, remainingRows, row, rowKey, spacerTd, startIndex, tbody, topSpacer;
         if (isUpdatingRows) {
           return;
         }

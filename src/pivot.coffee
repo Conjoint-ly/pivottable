@@ -2008,10 +2008,22 @@ callWithJQuery ($) ->
         colKeys = pivotData.getColKeys()
 
         totalRows = rowKeys.length
+
+        # Calculate estimated visible rows if virtualization is enabled
+        estimatedVisibleRows = totalRows
+        if opts.table.virtualization.enabled
+            containerHeight = opts.table.virtualization.containerHeight || 500
+            rowHeight = opts.table.virtualization.rowHeight || 30
+            bufferSize = opts.table.virtualization.bufferSize || 5
+            headerHeight = 50 # estimated header height
+            # Formula from calculateVisibleRange: Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize)
+            estimatedVisibleRows = Math.min(totalRows, Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize))
+
         callLifecycle('render-started', 0, {
             totalRows: totalRows
             totalCols: colKeys.length
             domElements: 0
+            estimatedVisibleRows: estimatedVisibleRows
         })
         return if aborted
 
