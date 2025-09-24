@@ -985,7 +985,8 @@
               isVirtualized: metadata != null ? metadata.isVirtualized : void 0,
               domElements: metadata != null ? metadata.domElements : void 0,
               currentIndex: metadata != null ? metadata.currentIndex : void 0,
-              endIndex: metadata != null ? metadata.endIndex : void 0
+              endIndex: metadata != null ? metadata.endIndex : void 0,
+              estimatedVisibleRows: metadata != null ? metadata.estimatedVisibleRows : void 0
             };
             abortFn = null;
             if (stage === 'render-started' || stage === 'render-progress') {
@@ -2811,7 +2812,8 @@
           isVirtualized: true,
           domElements: metadata != null ? metadata.domElements : void 0,
           currentIndex: metadata != null ? metadata.currentIndex : void 0,
-          endIndex: metadata != null ? metadata.endIndex : void 0
+          endIndex: metadata != null ? metadata.endIndex : void 0,
+          estimatedVisibleRows: metadata != null ? metadata.estimatedVisibleRows : void 0
         };
         abortFn = null;
         if (stage === 'render-started' || stage === 'render-progress') {

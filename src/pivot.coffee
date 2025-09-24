@@ -569,6 +569,7 @@ callWithJQuery ($) ->
                         domElements: metadata?.domElements
                         currentIndex: metadata?.currentIndex
                         endIndex: metadata?.endIndex
+                        estimatedVisibleRows: metadata?.estimatedVisibleRows
                     }
 
                     abortFn = null
@@ -2031,6 +2032,7 @@ callWithJQuery ($) ->
                 domElements: metadata?.domElements
                 currentIndex: metadata?.currentIndex
                 endIndex: metadata?.endIndex
+                estimatedVisibleRows: metadata?.estimatedVisibleRows
             }
 
             abortFn = null
