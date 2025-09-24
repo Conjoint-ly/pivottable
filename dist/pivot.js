@@ -942,9 +942,10 @@
     //expose these to the outside world
     $.pivotUtilities = {aggregatorTemplates, aggregators, renderers, derivers, locales, naturalSort, numberFormat, sortAs, PivotData, pivotTableRendererVirtualized, pivotTableRendererAsync};
     pivotTableRendererAsync = function(pivotData, opts) {
-      var aborted, forceRefresh, startTime;
+      var abortMessage, aborted, forceRefresh, startTime;
       startTime = Date.now();
       aborted = false;
+      abortMessage = null;
       forceRefresh = opts.forceRefresh || false;
       return new Promise(function(resolve, reject) {
         var abortElement, bufferSize, c, callLifecycle, colAttrs, colKey, colKeys, colSpans, containerHeight, createDataRow, currentIndex, defaultMessage, defaults, error, estimatedVisibleRows, finishRendering, getClickHandler, headerHeight, i, j, message, precomputeSpans, processRowsBatch, r, ref, ref1, ref2, result, rowAttrs, rowHeight, rowKeys, rowSpans, shouldVirtualize, spanSize, tbody, th, thead, theadFragment, totalRows, tr, x;
@@ -972,7 +973,7 @@
           };
           opts = $.extend(true, {}, defaults, opts);
           callLifecycle = function(stage, progress = 0, metadata = null) {
-            var abortFn, abortMessage, data, toggleVirtualizationFn;
+            var abortFn, data, toggleVirtualizationFn;
             if (opts.lifecycleCallback == null) {
               return;
             }
@@ -987,7 +988,6 @@
               currentIndex: metadata != null ? metadata.currentIndex : void 0,
               endIndex: metadata != null ? metadata.endIndex : void 0
             };
-            abortMessage = null;
             abortFn = null;
             if (stage === 'render-started' || stage === 'render-progress') {
               abortFn = function(message) {
@@ -1350,7 +1350,7 @@
       });
     };
     pivotTableRenderer = function(pivotData, opts) {
-      var aborted, aggregator, c, callLifecycle, colAttrs, colKey, colKeys, defaultMessage, defaults, getClickHandler, i, j, message, r, ref, ref1, result, rowAttrs, rowKey, rowKeys, spanSize, startTime, tbody, td, th, thead, totalAggregator, tr, txt, val, x;
+      var abortMessage, aborted, aggregator, c, callLifecycle, colAttrs, colKey, colKeys, defaultMessage, defaults, getClickHandler, i, j, message, r, ref, ref1, result, rowAttrs, rowKey, rowKeys, spanSize, startTime, tbody, td, th, thead, totalAggregator, tr, txt, val, x;
       defaults = {
         table: {
           clickCallback: null,
@@ -1364,9 +1364,10 @@
       };
       opts = $.extend(true, {}, defaults, opts);
       aborted = false;
+      abortMessage = null;
       startTime = Date.now();
       callLifecycle = function(stage, progress = 0, metadata = null) {
-        var abortFn, abortMessage, data, toggleVirtualizationFn;
+        var abortFn, data, toggleVirtualizationFn;
         if (opts.lifecycleCallback == null) {
           return;
         }
@@ -1383,7 +1384,6 @@
         };
         // totalRows: pivotData.getRowKeys().length
         // totalCols: pivotData.getColKeys().length
-        abortMessage = null;
         abortFn = null;
         toggleVirtualizationFn = null;
         if (stage === 'render-started' || stage === 'render-progress') {
@@ -2738,7 +2738,7 @@
       return this;
     };
     return pivotTableRendererVirtualized = function(pivotData, opts) {
-      var abortElement, aborted, applyExistingColumnWidths, applyWidthsToAllSections, applyWidthsToDataRows, applyWidthsToFooter, applyWidthsToHeaders, availableHeight, bufferSize, buildFooter, buildHeaders, calculateTotalColumns, calculateVisibleRange, callLifecycle, colAttrs, colKeys, columnWidths, columnWidthsMeasured, container, containerHeight, createDataRow, currentEndIndex, currentStartIndex, defaultMessage, defaults, estimatedVisibleRows, forceRefresh, getClickHandler, headerHeight, isUpdatingRows, mainTable, measureAndApplyColumnWidths, message, pivotTableElement, pivotUIElement, pivotUIHeight, rowAttrs, rowHeight, rowKeys, setupScrollHandler, shouldVirtualize, spanSize, startTime, tableAreaTop, tbody, totalColumns, totalRows, uiAreaTop, updateVisibleRows, usedHeight;
+      var abortElement, abortMessage, aborted, applyExistingColumnWidths, applyWidthsToAllSections, applyWidthsToDataRows, applyWidthsToFooter, applyWidthsToHeaders, availableHeight, bufferSize, buildFooter, buildHeaders, calculateTotalColumns, calculateVisibleRange, callLifecycle, colAttrs, colKeys, columnWidths, columnWidthsMeasured, container, containerHeight, createDataRow, currentEndIndex, currentStartIndex, defaultMessage, defaults, estimatedVisibleRows, forceRefresh, getClickHandler, headerHeight, isUpdatingRows, mainTable, measureAndApplyColumnWidths, message, pivotTableElement, pivotUIElement, pivotUIHeight, rowAttrs, rowHeight, rowKeys, setupScrollHandler, shouldVirtualize, spanSize, startTime, tableAreaTop, tbody, totalColumns, totalRows, uiAreaTop, updateVisibleRows, usedHeight;
       forceRefresh = opts.forceRefresh || false;
       aborted = false;
       defaults = {
@@ -2799,9 +2799,10 @@
         }
       }
       aborted = false;
+      abortMessage = null;
       startTime = Date.now();
       callLifecycle = function(stage, progress, metadata = null) {
-        var abortFn, abortMessage, data, toggleVirtualizationFn;
+        var abortFn, data, toggleVirtualizationFn;
         if (opts.lifecycleCallback == null) {
           return;
         }
@@ -2816,7 +2817,6 @@
           currentIndex: metadata != null ? metadata.currentIndex : void 0,
           endIndex: metadata != null ? metadata.endIndex : void 0
         };
-        abortMessage = null;
         abortFn = null;
         if (stage === 'render-started' || stage === 'render-progress') {
           abortFn = function(message) {

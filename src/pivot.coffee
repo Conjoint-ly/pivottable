@@ -533,6 +533,7 @@ callWithJQuery ($) ->
     pivotTableRendererAsync = (pivotData, opts) ->
         startTime = Date.now()
         aborted = false
+        abortMessage = null
         forceRefresh = opts.forceRefresh || false
 
         return new Promise (resolve, reject) ->
@@ -571,7 +572,6 @@ callWithJQuery ($) ->
                         endIndex: metadata?.endIndex
                     }
 
-                    abortMessage = null
                     abortFn = null
                     if stage in ['render-started', 'render-progress']
                         abortFn = (message) ->
@@ -902,6 +902,7 @@ callWithJQuery ($) ->
         opts = $.extend(true, {}, defaults, opts)
 
         aborted = false
+        abortMessage = null
         startTime = Date.now()
 
         callLifecycle = (stage, progress = 0, metadata = null) ->
@@ -921,7 +922,6 @@ callWithJQuery ($) ->
             # totalRows: pivotData.getRowKeys().length
             # totalCols: pivotData.getColKeys().length
 
-            abortMessage = null
             abortFn = null
             toggleVirtualizationFn = null
             if stage in ['render-started', 'render-progress']
@@ -2018,6 +2018,7 @@ callWithJQuery ($) ->
                 opts.table.virtualization.containerHeight = availableHeight
 
         aborted = false
+        abortMessage = null
         startTime = Date.now()
 
         callLifecycle = (stage, progress, metadata = null) ->
@@ -2035,7 +2036,6 @@ callWithJQuery ($) ->
                 endIndex: metadata?.endIndex
             }
 
-            abortMessage = null
             abortFn = null
             if stage in ['render-started', 'render-progress']
                 abortFn = (message) ->
