@@ -2,11 +2,12 @@
   var callWithJQuery;
 
   callWithJQuery = function(pivotModule) {
-    if (typeof exports === "object" && typeof module === "object") {
+    if (typeof exports === "object" && typeof module === "object") { // CommonJS
       return pivotModule(require("jquery"));
-    } else if (typeof define === "function" && define.amd) {
+    } else if (typeof define === "function" && define.amd) { // AMD
       return define(["jquery"], pivotModule);
     } else {
+      // Plain browser env
       return pivotModule(jQuery);
     }
   };
@@ -44,7 +45,7 @@
             var ref;
             return (ref = opts.labels[item]) != null ? ref : item;
           });
-          fullAggName += "(" + (valAttrs.join(", ")) + ")";
+          fullAggName += `(${valAttrs.join(", ")})`;
         }
         headers = (function() {
           var i, len, results;
@@ -112,14 +113,14 @@
             return (ref1 = opts.labels[item]) != null ? ref1 : item;
           }).join("-");
           if (hAxisTitle !== "") {
-            title += " " + opts.localeStrings.vs + " " + hAxisTitle;
+            title += ` ${opts.localeStrings.vs} ${hAxisTitle}`;
           }
           groupByTitle = pivotData.rowAttrs.map(function(item) {
             var ref1;
             return (ref1 = opts.labels[item]) != null ? ref1 : item;
           }).join("-");
           if (groupByTitle !== "") {
-            title += " " + opts.localeStrings.by + " " + groupByTitle;
+            title += ` ${opts.localeStrings.by} ${groupByTitle}`;
           }
         }
         options = {
@@ -159,15 +160,14 @@
           width: "100%",
           height: "100%"
         });
-        wrapper = new google.visualization.ChartWrapper({
-          dataTable: dataTable,
-          chartType: chartType,
-          options: options
-        });
-        return {
-          result: result,
-          wrapper: wrapper
-        };
+        wrapper = new google.visualization.ChartWrapper({dataTable, chartType, options});
+        
+          // result.bind "dblclick", ->
+        //     editor = new google.visualization.ChartEditor()
+        //     google.visualization.events.addListener editor, 'ok', ->
+        //         editor.getChartWrapper().draw(result[0])
+        //     editor.openDialog(wrapper)
+        return {result, wrapper};
       };
     };
     return $.pivotUtilities.gchart_renderers = {
