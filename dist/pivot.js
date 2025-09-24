@@ -1028,12 +1028,13 @@
           });
           if (aborted && !forceRefresh) {
             // Show refresh button and display abort message
-            this.find(".pvtRefreshBtn").show();
+            $(".pvtRefreshBtn").show();
             defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
             message = abortMessage || defaultMessage;
             abortElement = $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
             return resolve(abortElement);
           }
+          $(".pvtRefreshBtn").hide();
           shouldVirtualize = opts.table.virtualization.enabled;
           if (shouldVirtualize) {
             callLifecycle('render-progress', 0);
@@ -1183,12 +1184,13 @@
           callLifecycle('render-progress', 1);
           if (aborted && !forceRefresh) {
             // Show refresh button and display abort message
-            this.find(".pvtRefreshBtn").show();
+            $(".pvtRefreshBtn").show();
             defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
             message = abortMessage || defaultMessage;
             abortElement = $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
             return resolve(abortElement);
           }
+          $(".pvtRefreshBtn").hide();
           // Async processing of data rows
           tbody = document.createElement("tbody");
           totalRows = rowKeys.length;
@@ -1397,11 +1399,12 @@
       callLifecycle('render-started');
       if (aborted && !forceRefresh) {
         // Show refresh button and display abort message
-        this.find(".pvtRefreshBtn").show();
+        $(".pvtRefreshBtn").show();
         defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
         message = abortMessage || defaultMessage;
         return $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
       }
+      $(".pvtRefreshBtn").hide();
       colAttrs = pivotData.colAttrs;
       rowAttrs = pivotData.rowAttrs;
       rowKeys = pivotData.getRowKeys();
@@ -2477,13 +2480,13 @@
           }
           if (!shouldProceed) {
             // Show refresh button and display message
-            this.find(".pvtRefreshBtn").show();
+            $(".pvtRefreshBtn").show();
             pivotTable.html("<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>Calculation skipped due to complexity.<br>Click refresh button to force calculation.</div>");
             pivotTable.css("opacity", 1);
             return;
           }
           // Hide refresh button if calculation proceeds
-          this.find(".pvtRefreshBtn").hide();
+          $(".pvtRefreshBtn").hide();
           if (subopts.asyncMode) {
             // Show loading indicator
             pivotTable.html("<div class='pvt-loading' style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-spinner fa-spin'></i><br>Processing data...</div>");
@@ -2854,12 +2857,13 @@
       });
       if (aborted && !forceRefresh) {
         // Show refresh button and display abort message
-        this.find(".pvtRefreshBtn").show();
+        $(".pvtRefreshBtn").show();
         defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
         message = abortMessage || defaultMessage;
         abortElement = $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
         return abortElement;
       }
+      $('.pvtRefreshBtn').hide();
       shouldVirtualize = opts.table.virtualization.enabled;
       if (!shouldVirtualize) {
         return pivotTableRenderer(pivotData, opts);
