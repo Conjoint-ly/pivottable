@@ -963,7 +963,6 @@
                 bufferSize: 5,
                 containerHeight: 400,
                 headerHeight: 60,
-                threshold: 1000, // Использовать виртуализацию для таблиц больше 1000 строк
                 autoHeight: false // Автоматически определять высоту на основе pvtUi
               }
             },
@@ -1008,18 +1007,14 @@
             }
             return opts.lifecycleCallback(data, abortFn, toggleVirtualizationFn);
           };
-          // Проверяем, нужна ли виртуализация
           totalRows = pivotData.getRowKeys().length;
           // Calculate estimated visible rows if virtualization is enabled
-          estimatedVisibleRows = totalRows;
-          if (opts.table.virtualization.enabled) {
-            containerHeight = opts.table.virtualization.containerHeight || 500;
-            rowHeight = opts.table.virtualization.rowHeight || 30;
-            bufferSize = opts.table.virtualization.bufferSize || 5;
-            headerHeight = 50; // estimated header height
-            // Formula from calculateVisibleRange: Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize)
-            estimatedVisibleRows = Math.min(totalRows, Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize));
-          }
+          containerHeight = opts.table.virtualization.containerHeight;
+          rowHeight = opts.table.virtualization.rowHeight;
+          bufferSize = opts.table.virtualization.bufferSize;
+          headerHeight = opts.table.virtualization.headerHeight;
+          // Formula from calculateVisibleRange: Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize)
+          estimatedVisibleRows = Math.min(totalRows, Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize));
           callLifecycle('render-started', 0, {
             totalRows: totalRows,
             totalCols: pivotData.getColKeys().length,
@@ -2751,6 +2746,7 @@
             rowHeight: 30,
             bufferSize: 5, // количество строк буфера сверху и снизу
             containerHeight: 400, // высота контейнера таблицы
+            headerHeight: 60, // высота заголовка таблицы
             autoHeight: false // Автоматически определять высоту на основе pvtUi
           }
         },
@@ -2840,15 +2836,12 @@
       colKeys = pivotData.getColKeys();
       totalRows = rowKeys.length;
       // Calculate estimated visible rows if virtualization is enabled
-      estimatedVisibleRows = totalRows;
-      if (opts.table.virtualization.enabled) {
-        containerHeight = opts.table.virtualization.containerHeight || 500;
-        rowHeight = opts.table.virtualization.rowHeight || 30;
-        bufferSize = opts.table.virtualization.bufferSize || 5;
-        headerHeight = 50; // estimated header height
-        // Formula from calculateVisibleRange: Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize)
-        estimatedVisibleRows = Math.min(totalRows, Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize));
-      }
+      containerHeight = opts.table.virtualization.containerHeight;
+      rowHeight = opts.table.virtualization.rowHeight;
+      bufferSize = opts.table.virtualization.bufferSize;
+      headerHeight = opts.table.virtualization.headerHeight;
+      // Formula from calculateVisibleRange: Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize)
+      estimatedVisibleRows = Math.min(totalRows, Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize));
       callLifecycle('render-started', 0, {
         totalRows: totalRows,
         totalCols: colKeys.length,
