@@ -1029,7 +1029,7 @@
           if (aborted && !forceRefresh) {
             // Show refresh button and display abort message
             $(".pvtRefreshBtn").show();
-            defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
+            defaultMessage = "There's a lot of data to render. Rendering may freeze and be interrupted.<br>Click refresh button to force rendering.";
             message = abortMessage || defaultMessage;
             abortElement = $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
             return resolve(abortElement);
@@ -1185,7 +1185,7 @@
           if (aborted && !forceRefresh) {
             // Show refresh button and display abort message
             $(".pvtRefreshBtn").show();
-            defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
+            defaultMessage = "There's a lot of data to render. Rendering may freeze and be interrupted.<br>Click refresh button to force rendering.";
             message = abortMessage || defaultMessage;
             abortElement = $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
             return resolve(abortElement);
@@ -1400,7 +1400,7 @@
       if (aborted && !forceRefresh) {
         // Show refresh button and display abort message
         $(".pvtRefreshBtn").show();
-        defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
+        defaultMessage = "There's a lot of data to render. Rendering may freeze and be interrupted.<br>Click refresh button to force rendering.";
         message = abortMessage || defaultMessage;
         return $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
       }
@@ -2858,7 +2858,7 @@
       if (aborted && !forceRefresh) {
         // Show refresh button and display abort message
         $(".pvtRefreshBtn").show();
-        defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
+        defaultMessage = "There's a lot of data to render. Rendering may freeze and be interrupted.<br>Click refresh button to force rendering.";
         message = abortMessage || defaultMessage;
         abortElement = $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
         return abortElement;
