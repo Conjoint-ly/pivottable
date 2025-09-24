@@ -603,11 +603,9 @@ callWithJQuery ($) ->
                     estimatedVisibleRows: estimatedVisibleRows
                 })
 
-                return resolve($("<div>").text("Rendering aborted by user")) if aborted
+                return resolve($("<div>").text("Rendering aborted by user")[0]) if aborted
 
                 shouldVirtualize = opts.table.virtualization.enabled
-
-                return resolve($("<div>").text("Rendering aborted by user")) if aborted
 
                 if shouldVirtualize
                     callLifecycle('render-progress', 0)
@@ -719,7 +717,7 @@ callWithJQuery ($) ->
                 result.appendChild thead
 
                 callLifecycle('render-progress', 1)
-                return resolve($("<div>").text("Rendering aborted by user")) if aborted
+                return resolve($("<div>").text("Rendering aborted by user")[0]) if aborted
 
                 # Async processing of data rows
                 tbody = document.createElement("tbody")
@@ -911,7 +909,7 @@ callWithJQuery ($) ->
             opts.lifecycleCallback(data, abortFn, toggleVirtualizationFn)
 
         callLifecycle('render-started')
-        return $("<div>").text("Rendering aborted by user") if aborted
+        return $("<div>").text("Rendering aborted by user")[0] if aborted
 
         colAttrs = pivotData.colAttrs
         rowAttrs = pivotData.rowAttrs

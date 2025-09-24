@@ -1022,12 +1022,9 @@
             estimatedVisibleRows: estimatedVisibleRows
           });
           if (aborted) {
-            return resolve($("<div>").text("Rendering aborted by user"));
+            return resolve($("<div>").text("Rendering aborted by user")[0]);
           }
           shouldVirtualize = opts.table.virtualization.enabled;
-          if (aborted) {
-            return resolve($("<div>").text("Rendering aborted by user"));
-          }
           if (shouldVirtualize) {
             callLifecycle('render-progress', 0);
             result = pivotTableRendererVirtualized(pivotData, opts);
@@ -1175,7 +1172,7 @@
           result.appendChild(thead);
           callLifecycle('render-progress', 1);
           if (aborted) {
-            return resolve($("<div>").text("Rendering aborted by user"));
+            return resolve($("<div>").text("Rendering aborted by user")[0]);
           }
           // Async processing of data rows
           tbody = document.createElement("tbody");
@@ -1380,7 +1377,7 @@
       };
       callLifecycle('render-started');
       if (aborted) {
-        return $("<div>").text("Rendering aborted by user");
+        return $("<div>").text("Rendering aborted by user")[0];
       }
       colAttrs = pivotData.colAttrs;
       rowAttrs = pivotData.rowAttrs;
