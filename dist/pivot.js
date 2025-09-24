@@ -946,7 +946,7 @@
       startTime = Date.now();
       aborted = false;
       return new Promise(function(resolve, reject) {
-        var c, callLifecycle, colAttrs, colKey, colKeys, colSpans, createDataRow, currentIndex, defaults, error, finishRendering, getClickHandler, i, j, precomputeSpans, processRowsBatch, r, ref, ref1, ref2, result, rowAttrs, rowKeys, rowSpans, shouldVirtualize, spanSize, tbody, th, thead, theadFragment, totalRows, tr, x;
+        var bufferSize, c, callLifecycle, colAttrs, colKey, colKeys, colSpans, containerHeight, createDataRow, currentIndex, defaults, error, estimatedVisibleRows, finishRendering, getClickHandler, headerHeight, i, j, precomputeSpans, processRowsBatch, r, ref, ref1, ref2, result, rowAttrs, rowHeight, rowKeys, rowSpans, shouldVirtualize, spanSize, tbody, th, thead, theadFragment, totalRows, tr, x;
         try {
           defaults = {
             renderChunkSize: 100, // Размер чанка для рендеринга строк
@@ -1005,11 +1005,25 @@
           };
           // Проверяем, нужна ли виртуализация
           totalRows = pivotData.getRowKeys().length;
+          // Calculate estimated visible rows if virtualization is enabled
+          estimatedVisibleRows = totalRows;
+          if (opts.table.virtualization.enabled) {
+            containerHeight = opts.table.virtualization.containerHeight || 500;
+            rowHeight = opts.table.virtualization.rowHeight || 30;
+            bufferSize = opts.table.virtualization.bufferSize || 5;
+            headerHeight = 50; // estimated header height
+            // Formula from calculateVisibleRange: Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize)
+            estimatedVisibleRows = Math.min(totalRows, Math.ceil((containerHeight - headerHeight) / rowHeight) + (2 * bufferSize));
+          }
           callLifecycle('render-started', 0, {
             totalRows: totalRows,
             totalCols: pivotData.getColKeys().length,
-            isVirtualized: opts.table.virtualization.enabled
+            isVirtualized: opts.table.virtualization.enabled,
+            estimatedVisibleRows: estimatedVisibleRows
           });
+          if (aborted) {
+            return resolve($("<div>").text("Rendering aborted by user"));
+          }
           shouldVirtualize = opts.table.virtualization.enabled;
           if (aborted) {
             return resolve($("<div>").text("Rendering aborted by user"));
