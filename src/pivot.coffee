@@ -533,6 +533,7 @@ callWithJQuery ($) ->
     pivotTableRendererAsync = (pivotData, opts) ->
         startTime = Date.now()
         aborted = false
+        forceRefresh = opts.forceRefresh || false
 
         return new Promise (resolve, reject) ->
             try
@@ -570,9 +571,12 @@ callWithJQuery ($) ->
                         endIndex: metadata?.endIndex
                     }
 
+                    abortMessage = null
                     abortFn = null
                     if stage in ['render-started', 'render-progress']
-                        abortFn = -> aborted = true
+                        abortFn = (message) ->
+                            aborted = true
+                            abortMessage = message if message?
 
                     toggleVirtualizationFn = null
                     if stage in ['render-started']
@@ -603,7 +607,13 @@ callWithJQuery ($) ->
                     estimatedVisibleRows: estimatedVisibleRows
                 })
 
-                return resolve($("<div>").text("Rendering aborted by user")[0]) if aborted
+                if aborted and not forceRefresh
+                    # Show refresh button and display abort message
+                    @find(".pvtRefreshBtn").show()
+                    defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering."
+                    message = abortMessage || defaultMessage
+                    abortElement = $("<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>#{message}</div>")[0]
+                    return resolve(abortElement)
 
                 shouldVirtualize = opts.table.virtualization.enabled
 
@@ -717,7 +727,13 @@ callWithJQuery ($) ->
                 result.appendChild thead
 
                 callLifecycle('render-progress', 1)
-                return resolve($("<div>").text("Rendering aborted by user")[0]) if aborted
+                if aborted and not forceRefresh
+                    # Show refresh button and display abort message
+                    @find(".pvtRefreshBtn").show()
+                    defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering."
+                    message = abortMessage || defaultMessage
+                    abortElement = $("<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>#{message}</div>")[0]
+                    return resolve(abortElement)
 
                 # Async processing of data rows
                 tbody = document.createElement("tbody")
@@ -784,7 +800,7 @@ callWithJQuery ($) ->
                         totalRows: totalRows
                     })
 
-                    return if aborted
+                    return if aborted and not forceRefresh
 
                     currentIndex = endIndex
 
@@ -803,7 +819,7 @@ callWithJQuery ($) ->
                         totalRows: totalRows
                     })
 
-                    return if aborted
+                    return if aborted and not forceRefresh
 
                     #finally, the row for col totals, and a grand total
                     if opts.table.colTotals || rowAttrs.length == 0
@@ -901,15 +917,23 @@ callWithJQuery ($) ->
             # totalRows: pivotData.getRowKeys().length
             # totalCols: pivotData.getColKeys().length
 
+            abortMessage = null
             abortFn = null
             toggleVirtualizationFn = null
             if stage in ['render-started', 'render-progress']
-                abortFn = -> aborted = true
+                abortFn = (message) ->
+                    aborted = true
+                    abortMessage = message if message?
 
             opts.lifecycleCallback(data, abortFn, toggleVirtualizationFn)
 
         callLifecycle('render-started')
-        return $("<div>").text("Rendering aborted by user")[0] if aborted
+        if aborted and not forceRefresh
+            # Show refresh button and display abort message
+            @find(".pvtRefreshBtn").show()
+            defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering."
+            message = abortMessage || defaultMessage
+            return $("<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>#{message}</div>")[0]
 
         colAttrs = pivotData.colAttrs
         rowAttrs = pivotData.rowAttrs
@@ -1679,6 +1703,7 @@ callWithJQuery ($) ->
                 # Передаем ссылку на UI элемент для автоопределения высоты
                 subopts.rendererOptions = $.extend(true, {}, opts.rendererOptions)
                 subopts.rendererOptions.pivotUIElement = this[0]
+                subopts.rendererOptions.forceRefresh = forceRefresh
                 #construct filter here
                 exclusions = {}
                 @find('input.pvtFilter').not(':checked').each ->
@@ -1930,6 +1955,8 @@ callWithJQuery ($) ->
     ###
 
     pivotTableRendererVirtualized = (pivotData, opts) ->
+        forceRefresh = opts.forceRefresh || false
+        aborted = false
         defaults =
             table:
                 clickCallback: null
@@ -2002,9 +2029,12 @@ callWithJQuery ($) ->
                 endIndex: metadata?.endIndex
             }
 
+            abortMessage = null
             abortFn = null
             if stage in ['render-started', 'render-progress']
-                abortFn = -> aborted = true
+                abortFn = (message) ->
+                    aborted = true
+                    abortMessage = message if message?
 
             toggleVirtualizationFn = null
             if stage in ['render-started']
@@ -2036,7 +2066,13 @@ callWithJQuery ($) ->
             domElements: 0
             estimatedVisibleRows: estimatedVisibleRows
         })
-        return if aborted
+        if aborted and not forceRefresh
+            # Show refresh button and display abort message
+            @find(".pvtRefreshBtn").show()
+            defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering."
+            message = abortMessage || defaultMessage
+            abortElement = $("<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>#{message}</div>")[0]
+            return abortElement
 
         shouldVirtualize = opts.table.virtualization.enabled
 

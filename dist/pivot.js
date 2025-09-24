@@ -942,11 +942,12 @@
     //expose these to the outside world
     $.pivotUtilities = {aggregatorTemplates, aggregators, renderers, derivers, locales, naturalSort, numberFormat, sortAs, PivotData, pivotTableRendererVirtualized, pivotTableRendererAsync};
     pivotTableRendererAsync = function(pivotData, opts) {
-      var aborted, startTime;
+      var aborted, forceRefresh, startTime;
       startTime = Date.now();
       aborted = false;
+      forceRefresh = opts.forceRefresh || false;
       return new Promise(function(resolve, reject) {
-        var bufferSize, c, callLifecycle, colAttrs, colKey, colKeys, colSpans, containerHeight, createDataRow, currentIndex, defaults, error, estimatedVisibleRows, finishRendering, getClickHandler, headerHeight, i, j, precomputeSpans, processRowsBatch, r, ref, ref1, ref2, result, rowAttrs, rowHeight, rowKeys, rowSpans, shouldVirtualize, spanSize, tbody, th, thead, theadFragment, totalRows, tr, x;
+        var abortElement, bufferSize, c, callLifecycle, colAttrs, colKey, colKeys, colSpans, containerHeight, createDataRow, currentIndex, defaultMessage, defaults, error, estimatedVisibleRows, finishRendering, getClickHandler, headerHeight, i, j, message, precomputeSpans, processRowsBatch, r, ref, ref1, ref2, result, rowAttrs, rowHeight, rowKeys, rowSpans, shouldVirtualize, spanSize, tbody, th, thead, theadFragment, totalRows, tr, x;
         try {
           defaults = {
             renderChunkSize: 100, // Размер чанка для рендеринга строк
@@ -971,7 +972,7 @@
           };
           opts = $.extend(true, {}, defaults, opts);
           callLifecycle = function(stage, progress = 0, metadata = null) {
-            var abortFn, data, toggleVirtualizationFn;
+            var abortFn, abortMessage, data, toggleVirtualizationFn;
             if (opts.lifecycleCallback == null) {
               return;
             }
@@ -986,10 +987,14 @@
               currentIndex: metadata != null ? metadata.currentIndex : void 0,
               endIndex: metadata != null ? metadata.endIndex : void 0
             };
+            abortMessage = null;
             abortFn = null;
             if (stage === 'render-started' || stage === 'render-progress') {
-              abortFn = function() {
-                return aborted = true;
+              abortFn = function(message) {
+                aborted = true;
+                if (message != null) {
+                  return abortMessage = message;
+                }
               };
             }
             toggleVirtualizationFn = null;
@@ -1021,8 +1026,13 @@
             isVirtualized: opts.table.virtualization.enabled,
             estimatedVisibleRows: estimatedVisibleRows
           });
-          if (aborted) {
-            return resolve($("<div>").text("Rendering aborted by user")[0]);
+          if (aborted && !forceRefresh) {
+            // Show refresh button and display abort message
+            this.find(".pvtRefreshBtn").show();
+            defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
+            message = abortMessage || defaultMessage;
+            abortElement = $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
+            return resolve(abortElement);
           }
           shouldVirtualize = opts.table.virtualization.enabled;
           if (shouldVirtualize) {
@@ -1171,8 +1181,13 @@
           }
           result.appendChild(thead);
           callLifecycle('render-progress', 1);
-          if (aborted) {
-            return resolve($("<div>").text("Rendering aborted by user")[0]);
+          if (aborted && !forceRefresh) {
+            // Show refresh button and display abort message
+            this.find(".pvtRefreshBtn").show();
+            defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
+            message = abortMessage || defaultMessage;
+            abortElement = $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
+            return resolve(abortElement);
           }
           // Async processing of data rows
           tbody = document.createElement("tbody");
@@ -1245,7 +1260,7 @@
               endIndex: endIndex,
               totalRows: totalRows
             });
-            if (aborted) {
+            if (aborted && !forceRefresh) {
               return;
             }
             currentIndex = endIndex;
@@ -1266,7 +1281,7 @@
               endIndex: currentIndex,
               totalRows: totalRows
             });
-            if (aborted) {
+            if (aborted && !forceRefresh) {
               return;
             }
             //finally, the row for col totals, and a grand total
@@ -1333,7 +1348,7 @@
       });
     };
     pivotTableRenderer = function(pivotData, opts) {
-      var aborted, aggregator, c, callLifecycle, colAttrs, colKey, colKeys, defaults, getClickHandler, i, j, r, ref, ref1, result, rowAttrs, rowKey, rowKeys, spanSize, startTime, tbody, td, th, thead, totalAggregator, tr, txt, val, x;
+      var aborted, aggregator, c, callLifecycle, colAttrs, colKey, colKeys, defaultMessage, defaults, getClickHandler, i, j, message, r, ref, ref1, result, rowAttrs, rowKey, rowKeys, spanSize, startTime, tbody, td, th, thead, totalAggregator, tr, txt, val, x;
       defaults = {
         table: {
           clickCallback: null,
@@ -1349,7 +1364,7 @@
       aborted = false;
       startTime = Date.now();
       callLifecycle = function(stage, progress = 0, metadata = null) {
-        var abortFn, data, toggleVirtualizationFn;
+        var abortFn, abortMessage, data, toggleVirtualizationFn;
         if (opts.lifecycleCallback == null) {
           return;
         }
@@ -1366,18 +1381,26 @@
         };
         // totalRows: pivotData.getRowKeys().length
         // totalCols: pivotData.getColKeys().length
+        abortMessage = null;
         abortFn = null;
         toggleVirtualizationFn = null;
         if (stage === 'render-started' || stage === 'render-progress') {
-          abortFn = function() {
-            return aborted = true;
+          abortFn = function(message) {
+            aborted = true;
+            if (message != null) {
+              return abortMessage = message;
+            }
           };
         }
         return opts.lifecycleCallback(data, abortFn, toggleVirtualizationFn);
       };
       callLifecycle('render-started');
-      if (aborted) {
-        return $("<div>").text("Rendering aborted by user")[0];
+      if (aborted && !forceRefresh) {
+        // Show refresh button and display abort message
+        this.find(".pvtRefreshBtn").show();
+        defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
+        message = abortMessage || defaultMessage;
+        return $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
       }
       colAttrs = pivotData.colAttrs;
       rowAttrs = pivotData.rowAttrs;
@@ -2402,6 +2425,7 @@
           // Передаем ссылку на UI элемент для автоопределения высоты
           subopts.rendererOptions = $.extend(true, {}, opts.rendererOptions);
           subopts.rendererOptions.pivotUIElement = this[0];
+          subopts.rendererOptions.forceRefresh = forceRefresh;
           //construct filter here
           exclusions = {};
           this.find('input.pvtFilter').not(':checked').each(function() {
@@ -2711,7 +2735,9 @@
       return this;
     };
     return pivotTableRendererVirtualized = function(pivotData, opts) {
-      var aborted, applyExistingColumnWidths, applyWidthsToAllSections, applyWidthsToDataRows, applyWidthsToFooter, applyWidthsToHeaders, availableHeight, bufferSize, buildFooter, buildHeaders, calculateTotalColumns, calculateVisibleRange, callLifecycle, colAttrs, colKeys, columnWidths, columnWidthsMeasured, container, containerHeight, createDataRow, currentEndIndex, currentStartIndex, defaults, estimatedVisibleRows, getClickHandler, headerHeight, isUpdatingRows, mainTable, measureAndApplyColumnWidths, pivotTableElement, pivotUIElement, pivotUIHeight, rowAttrs, rowHeight, rowKeys, setupScrollHandler, shouldVirtualize, spanSize, startTime, tableAreaTop, tbody, totalColumns, totalRows, uiAreaTop, updateVisibleRows, usedHeight;
+      var abortElement, aborted, applyExistingColumnWidths, applyWidthsToAllSections, applyWidthsToDataRows, applyWidthsToFooter, applyWidthsToHeaders, availableHeight, bufferSize, buildFooter, buildHeaders, calculateTotalColumns, calculateVisibleRange, callLifecycle, colAttrs, colKeys, columnWidths, columnWidthsMeasured, container, containerHeight, createDataRow, currentEndIndex, currentStartIndex, defaultMessage, defaults, estimatedVisibleRows, forceRefresh, getClickHandler, headerHeight, isUpdatingRows, mainTable, measureAndApplyColumnWidths, message, pivotTableElement, pivotUIElement, pivotUIHeight, rowAttrs, rowHeight, rowKeys, setupScrollHandler, shouldVirtualize, spanSize, startTime, tableAreaTop, tbody, totalColumns, totalRows, uiAreaTop, updateVisibleRows, usedHeight;
+      forceRefresh = opts.forceRefresh || false;
+      aborted = false;
       defaults = {
         table: {
           clickCallback: null,
@@ -2772,7 +2798,7 @@
       aborted = false;
       startTime = Date.now();
       callLifecycle = function(stage, progress, metadata = null) {
-        var abortFn, data, toggleVirtualizationFn;
+        var abortFn, abortMessage, data, toggleVirtualizationFn;
         if (opts.lifecycleCallback == null) {
           return;
         }
@@ -2787,10 +2813,14 @@
           currentIndex: metadata != null ? metadata.currentIndex : void 0,
           endIndex: metadata != null ? metadata.endIndex : void 0
         };
+        abortMessage = null;
         abortFn = null;
         if (stage === 'render-started' || stage === 'render-progress') {
-          abortFn = function() {
-            return aborted = true;
+          abortFn = function(message) {
+            aborted = true;
+            if (message != null) {
+              return abortMessage = message;
+            }
           };
         }
         toggleVirtualizationFn = null;
@@ -2822,8 +2852,13 @@
         domElements: 0,
         estimatedVisibleRows: estimatedVisibleRows
       });
-      if (aborted) {
-        return;
+      if (aborted && !forceRefresh) {
+        // Show refresh button and display abort message
+        this.find(".pvtRefreshBtn").show();
+        defaultMessage = "Rendering aborted by user.<br>Click refresh button to force rendering.";
+        message = abortMessage || defaultMessage;
+        abortElement = $(`<div style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-exclamation-triangle'></i><br>${message}</div>`)[0];
+        return abortElement;
       }
       shouldVirtualize = opts.table.virtualization.enabled;
       if (!shouldVirtualize) {
