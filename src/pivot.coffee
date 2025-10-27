@@ -1287,6 +1287,7 @@ callWithJQuery ($) ->
                 table: {
                     virtualization: {
                         autoHeight: false  # Автоматически определять высоту на основе pvtUi
+                        heightCallback: null
                     }
                 }
             }
@@ -1519,6 +1520,42 @@ callWithJQuery ($) ->
                 .append(rowOrderArrow)
                 .append(colOrderArrow)
 
+            # Function to recalculate virtualized container height
+            recalculateVirtualizedHeight = =>
+                # Wait for layout to update after toggling elements
+                setTimeout ->
+                    container = $(".pvt-virtualized-container").first()
+                    if container.length > 0
+                        # Get UI element
+                        pivotUIElement = $(".pvtUi").first()[0]
+
+                        if pivotUIElement
+                            minHeight = 400
+                            pivotTableHeight = 0
+                            heightCallback = opts.rendererOptions.table.virtualization.heightCallback
+
+                            # Calculate available height
+                            if heightCallback?
+                                pivotUIHeight = heightCallback(container, pivotUIElement)
+                            else
+                                pivotUIHeight = pivotUIElement.clientHeight || pivotUIElement.offsetHeight
+                                # Find table area
+                                pivotTableElement = $(pivotUIElement).find('.pvtRendererArea').first()[0]
+                                if pivotTableElement
+                                    pivotTableHeight = pivotTableElement.clientHeight || pivotTableElement.offsetHeight
+
+                            availableHeight = Math.max(minHeight, pivotUIHeight, pivotTableHeight)
+
+                            # Update container height
+                            container.css('height', "#{availableHeight}px")
+
+                            # Trigger custom scroll event with forceUpdate flag
+                            scrollEvent = new CustomEvent('scroll', {
+                                detail: { forceUpdate: true }
+                            })
+                            container[0].dispatchEvent(scrollEvent)
+                , 50  # Small delay to ensure layout has updated
+
             unusedVisibility = $("<button>", class: "btn btn-default btn-xs")
                 .append($("<i>", class: "far fa-fw fa-ruler-vertical fa-flip-horizontal"))
                 .bind "click", ->
@@ -1529,6 +1566,8 @@ callWithJQuery ($) ->
                         pvtVals.attr("colspan", 1)
                     else
                         pvtVals.attr("colspan", 2)
+                    # Recalculate virtualized container height
+                    recalculateVirtualizedHeight()
             unusedVisibility.addClass("active") if opts.controls.unused
 
             rulesVisibility = $("<button>", class: "btn btn-default btn-xs")
@@ -1536,6 +1575,8 @@ callWithJQuery ($) ->
                 .bind "click", ->
                     $(this).toggleClass('active')
                     $(".pvtRows, .pvtCols").toggle()
+                    # Recalculate virtualized container height
+                    recalculateVirtualizedHeight()
             rulesVisibility.addClass("active") if opts.controls.rules
 
             panelsGroup = $("<div>", class: "btn-group", role: "group")
@@ -1736,6 +1777,10 @@ callWithJQuery ($) ->
                                         .appendTo unusedAttrsContainer
 
                                 pivotTable.css("opacity", 1)
+
+                                # Recalculate virtualized height after rendering
+                                setTimeout(recalculateVirtualizedHeight, 100)
+
                                 opts.onRefresh(pivotUIOptions) if opts.onRefresh? and !first?
                             .catch (error) =>
                                 @[0].pivotDataInstance = null
@@ -1773,6 +1818,10 @@ callWithJQuery ($) ->
                             .appendTo unusedAttrsContainer
 
                     pivotTable.css("opacity", 1)
+
+                    # Recalculate virtualized height after rendering
+                    setTimeout(recalculateVirtualizedHeight, 100)
+
                     opts.onRefresh(pivotUIOptions) if opts.onRefresh? and !first?
 
             refresh = (first, forceRefresh = false) =>
@@ -2249,15 +2298,14 @@ callWithJQuery ($) ->
 
                 if parseInt(j) == 0 and rowAttrs.length != 0
                     th = document.createElement("th")
+                    th.className = "pvtCornerHeader"
                     th.setAttribute("colspan", rowAttrs.length)
                     th.setAttribute("rowspan", colAttrs.length)
-                    th.style.cssText = "background: #f5f5f5; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap;"
                     tr.appendChild th
 
                 th = document.createElement("th")
                 th.className = "pvtAxisLabel"
                 th.textContent = opts.labels?[c] ? c
-                th.style.cssText = "background: #f5f5f5; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap;"
                 tr.appendChild th
 
                 for own i, colKey of colKeys
@@ -2267,7 +2315,6 @@ callWithJQuery ($) ->
                         th.className = "pvtColLabel"
                         th.textContent = colKey[j]
                         th.setAttribute("colspan", x)
-                        th.style.cssText = "background: #f0f0f0; border: 1px solid #ccc; padding: 5px; text-align: center; white-space: nowrap; min-width: 80px;"
                         if parseInt(j) == colAttrs.length-1 and rowAttrs.length != 0
                             th.setAttribute("rowspan", 2)
                         tr.appendChild th
@@ -2277,7 +2324,6 @@ callWithJQuery ($) ->
                     th.className = "pvtTotalLabel pvtRowTotalLabel"
                     th.innerHTML = opts.localeStrings.totals
                     th.setAttribute("rowspan", colAttrs.length + (if rowAttrs.length == 0 then 0 else 1))
-                    th.style.cssText = "background: #e6e6e6; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap; min-width: 80px;"
                     tr.appendChild th
 
                 thead.appendChild tr
@@ -2287,16 +2333,15 @@ callWithJQuery ($) ->
 
                 for own i, r of rowAttrs
                     th = document.createElement("th")
-                    th.className = "pvtAxisLabel"
+                    th.className = "pvtAxisLabel pvtRowAttr"
                     th.textContent = opts.labels?[r] ? r
-                    th.style.cssText = "background: #f5f5f5; border: 1px solid #ccc; padding: 5px; text-align: center; font-weight: bold; white-space: nowrap; min-width: 100px;"
                     tr.appendChild th
 
                 th = document.createElement("th")
+                th.className = "pvtEmptyCell"
                 if colAttrs.length == 0
                     th.className = "pvtTotalLabel pvtRowTotalLabel"
                     th.innerHTML = opts.localeStrings.totals
-                th.style.cssText = "border: 1px solid #ccc; padding: 5px; text-align: center; white-space: nowrap;"
                 tr.appendChild th
                 thead.appendChild tr
 
@@ -2395,7 +2440,8 @@ callWithJQuery ($) ->
 
         calculateVisibleRange = ->
             scrollTop = container.scrollTop
-            containerHeight = opts.table.virtualization.containerHeight
+            # Use actual container height instead of cached opts value
+            containerHeight = container.clientHeight || opts.table.virtualization.containerHeight
             rowHeight = opts.table.virtualization.rowHeight
             bufferSize = opts.table.virtualization.bufferSize
 
@@ -2415,11 +2461,11 @@ callWithJQuery ($) ->
 
             return {startIndex, endIndex}
 
-        updateVisibleRows = ->
+        updateVisibleRows = (forceUpdate = false) ->
             return if isUpdatingRows
 
             {startIndex, endIndex} = calculateVisibleRange()
-            return if startIndex == currentStartIndex and endIndex == currentEndIndex
+            return if not forceUpdate and startIndex == currentStartIndex and endIndex == currentEndIndex
 
             isUpdatingRows = true
 
@@ -2493,9 +2539,13 @@ callWithJQuery ($) ->
         setupScrollHandler = ->
             scrollTimeout = null
 
-            container.addEventListener 'scroll', ->
+            container.addEventListener 'scroll', (e) ->
                 clearTimeout(scrollTimeout) if scrollTimeout
-                scrollTimeout = setTimeout(updateVisibleRows, 16) # ~60fps
+                # Check if this is a forced update (e.g., from container resize)
+                forceUpdate = e.detail?.forceUpdate || false
+                scrollTimeout = setTimeout(->
+                    updateVisibleRows(forceUpdate)
+                , 16) # ~60fps
 
         tbody = document.createElement('tbody')
         mainTable.appendChild(tbody)
