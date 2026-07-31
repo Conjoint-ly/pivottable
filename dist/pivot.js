@@ -19,6 +19,13 @@
     Utilities
     */
     /*
+    Attach whatever a renderer produced to target and finish it off. Renderers return
+    either a DOM node, a jQuery object, or - for the Google Chart renderers - a
+    {result, wrapper} pair whose wrapper can only be drawn once result is attached to
+    the document. Attaching through jQuery accepts every shape; the attached result is
+    returned in the shape the renderer produced it.
+    */
+    /*
     Default Renderer for hierarchical table layout
     */
     /*
@@ -27,7 +34,7 @@
     /*
     Virtualized Pivot Table Renderer - оптимизированная версия для больших данных
     */
-    var PivotData, addSeparators, aggregatorTemplates, aggregators, dayNamesEn, derivers, getSort, locales, mthNamesEn, naturalSort, numberFormat, pivotTableRenderer, pivotTableRendererAsync, pivotTableRendererVirtualized, rd, renderers, rx, rz, sortAs, usFmt, usFmtInt, usFmtPct, zeroPad;
+    var PivotData, addSeparators, aggregatorTemplates, aggregators, attachRenderResult, dayNamesEn, derivers, getSort, locales, mthNamesEn, naturalSort, numberFormat, pivotTableRenderer, pivotTableRendererAsync, pivotTableRendererVirtualized, rd, renderers, rx, rz, sortAs, usFmt, usFmtInt, usFmtPct, zeroPad;
     addSeparators = function(nStr, thousandsSep, decimalSep) {
       var rgx, x, x1, x2;
       nStr += '';
@@ -1618,6 +1625,20 @@
       });
       return result;
     };
+    attachRenderResult = function(target, rendered) {
+      var result, wrapper;
+      if (rendered == null) {
+        throw new Error("Renderer returned nothing to attach");
+      }
+      if ((rendered.wrapper != null) && (rendered.result != null)) {
+        ({result, wrapper} = rendered);
+        $(target).append(result);
+        wrapper.draw($(result)[0]);
+        return result;
+      }
+      $(target).append(rendered);
+      return rendered;
+    };
     /*
     Pivot Table core: create PivotData object and call Renderer on it
     */
@@ -1716,8 +1737,7 @@
                       while (x.hasChildNodes()) {
                         x.removeChild(x.lastChild);
                       }
-                      x.appendChild(result);
-                      return resolve(result);
+                      return resolve(attachRenderResult(x, result));
                     }).catch((error) => {
                       return reject(error);
                     });
@@ -1735,8 +1755,7 @@
                               while (x.hasChildNodes()) {
                                 x.removeChild(x.lastChild);
                               }
-                              x.appendChild(result);
-                              return resolve(result);
+                              return resolve(attachRenderResult(x, result));
                             } catch (error1) {
                               error = error1;
                               return reject(error);
@@ -1795,7 +1814,19 @@
           x.removeChild(x.lastChild);
         }
         if (result) {
-          x.appendChild(result);
+          try {
+            attachRenderResult(x, result);
+          } catch (error1) {
+            e = error1;
+            if (typeof console !== "undefined" && console !== null) {
+              // Drawing a chart wrapper can fail after the renderer itself succeeded
+              console.error(e.stack);
+            }
+            while (x.hasChildNodes()) {
+              x.removeChild(x.lastChild);
+            }
+            attachRenderResult(x, $("<span>").html(opts.localeStrings.renderError));
+          }
         }
         return this;
       }
@@ -2346,7 +2377,7 @@
         initialRender = true;
         //set up for refreshing
         refreshDelayed = (first, forceRefresh = false) => {
-          var exclusions, inclusions, len3, newDropdown, numInputsToProcess, o, pivotPromise, pivotUIOptions, pvtUiCell, ref4, ref5, ref6, result, subopts, t, unusedAttrsContainer, vals, wrapper;
+          var exclusions, inclusions, len3, newDropdown, numInputsToProcess, o, pivotPromise, pivotUIOptions, pvtUiCell, ref4, ref5, ref6, subopts, t, unusedAttrsContainer, vals;
           subopts = {
             derivedAttributes: opts.derivedAttributes,
             localeStrings: opts.localeStrings,
@@ -2455,15 +2486,11 @@
             pivotTable.html("<div class='pvt-loading' style='text-align: center; padding: 20px; color: #666;'><i class='fas fa-spinner fa-spin'></i><br>Processing data...</div>");
             // Store pivot data instance for abort functionality
             this[0].pivotDataInstance = null;
-            pivotPromise = (["Line Chart", "Bar Chart", "Stacked Bar Chart", "Area Chart", "Scatter Chart", "Pie Chart"].indexOf(renderer.val()) > -1) ? (({result, wrapper} = pivotTable.pivot(materializedInput, subopts)), result.then(function(tableResult) {
-              wrapper.draw(tableResult);
-              return tableResult;
-            })) : pivotTable.pivot(materializedInput, subopts);
+            pivotPromise = pivotTable.pivot(materializedInput, subopts);
             if ((pivotPromise != null ? pivotPromise.then : void 0) != null) {
-              return pivotPromise.then((result) => {
+              return pivotPromise.then(() => {
                 var pivotUIOptions, unusedAttrsContainer;
                 this[0].pivotDataInstance = null;
-                pivotTable.empty().append(result);
                 pivotUIOptions = $.extend({}, opts, {
                   cols: subopts.cols,
                   rows: subopts.rows,
@@ -2499,13 +2526,7 @@
             }
           } else {
             // Synchronous mode - original behavior
-            if (["Line Chart", "Bar Chart", "Stacked Bar Chart", "Area Chart", "Scatter Chart", "Pie Chart"].indexOf(renderer.val()) > -1) {
-              ({result, wrapper} = pivotTable.pivot(materializedInput, subopts));
-              pivotTable.append(result);
-              wrapper.draw(result[0]);
-            } else {
-              pivotTable.append(pivotTable.pivot(materializedInput, subopts));
-            }
+            pivotTable.pivot(materializedInput, subopts);
             pivotUIOptions = $.extend({}, opts, {
               cols: subopts.cols,
               rows: subopts.rows,

@@ -1099,6 +1099,26 @@ callWithJQuery ($) ->
         return result
 
     ###
+    Attach whatever a renderer produced to target and finish it off. Renderers return
+    either a DOM node, a jQuery object, or - for the Google Chart renderers - a
+    {result, wrapper} pair whose wrapper can only be drawn once result is attached to
+    the document. Attaching through jQuery accepts every shape; the attached result is
+    returned in the shape the renderer produced it.
+    ###
+
+    attachRenderResult = (target, rendered) ->
+        throw new Error("Renderer returned nothing to attach") unless rendered?
+
+        if rendered.wrapper? and rendered.result?
+            {result, wrapper} = rendered
+            $(target).append(result)
+            wrapper.draw($(result)[0])
+            return result
+
+        $(target).append(rendered)
+        return rendered
+
+    ###
     Pivot Table core: create PivotData object and call Renderer on it
     ###
 
@@ -1191,8 +1211,7 @@ callWithJQuery ($) ->
                                     pivotTableRendererAsync(pivotData, opts.rendererOptions)
                                         .then (result) =>
                                             x.removeChild(x.lastChild) while x.hasChildNodes()
-                                            x.appendChild(result)
-                                            resolve(result)
+                                            resolve(attachRenderResult(x, result))
                                         .catch (error) =>
                                             reject(error)
                                 else
@@ -1205,8 +1224,7 @@ callWithJQuery ($) ->
                                                     try
                                                         result = opts.renderer(pivotData, opts.rendererOptions)
                                                         x.removeChild(x.lastChild) while x.hasChildNodes()
-                                                        x.appendChild(result)
-                                                        resolve(result)
+                                                        resolve(attachRenderResult(x, result))
                                                     catch error
                                                         reject(error)
                                                 , 1 # Small delay to allow UI updates
@@ -1241,7 +1259,14 @@ callWithJQuery ($) ->
                 result = $("<span>").html opts.localeStrings.computeError
 
             x.removeChild(x.lastChild) while x.hasChildNodes()
-            x.appendChild(result) if result
+            if result
+                try
+                    attachRenderResult(x, result)
+                catch e
+                    # Drawing a chart wrapper can fail after the renderer itself succeeded
+                    console.error(e.stack) if console?
+                    x.removeChild(x.lastChild) while x.hasChildNodes()
+                    attachRenderResult(x, $("<span>").html opts.localeStrings.renderError)
             return this
 
 
@@ -1741,19 +1766,12 @@ callWithJQuery ($) ->
                     # Store pivot data instance for abort functionality
                     @[0].pivotDataInstance = null
 
-                    pivotPromise = if (["Line Chart", "Bar Chart", "Stacked Bar Chart", "Area Chart", "Scatter Chart", "Pie Chart"].indexOf(renderer.val()) > -1)
-                        {result, wrapper} = pivotTable.pivot(materializedInput, subopts)
-                        result.then (tableResult) ->
-                            wrapper.draw(tableResult)
-                            return tableResult
-                    else
-                        pivotTable.pivot(materializedInput, subopts)
+                    pivotPromise = pivotTable.pivot(materializedInput, subopts)
 
                     if pivotPromise?.then?
                         pivotPromise
-                            .then (result) =>
+                            .then =>
                                 @[0].pivotDataInstance = null
-                                pivotTable.empty().append(result)
 
                                 pivotUIOptions = $.extend {}, opts,
                                     cols: subopts.cols
@@ -1789,12 +1807,7 @@ callWithJQuery ($) ->
                                 pivotTable.css("opacity", 1)
                 else
                     # Synchronous mode - original behavior
-                    if (["Line Chart", "Bar Chart", "Stacked Bar Chart", "Area Chart", "Scatter Chart", "Pie Chart"].indexOf(renderer.val()) > -1)
-                        {result, wrapper} = pivotTable.pivot(materializedInput, subopts);
-                        pivotTable.append(result)
-                        wrapper.draw(result[0])
-                    else
-                        pivotTable.append(pivotTable.pivot(materializedInput, subopts));
+                    pivotTable.pivot(materializedInput, subopts)
 
                     pivotUIOptions = $.extend {}, opts,
                         cols: subopts.cols
