@@ -1643,7 +1643,7 @@
     Pivot Table core: create PivotData object and call Renderer on it
     */
     $.fn.pivot = function(input, inputOpts, locale = "en") {
-      var defaults, e, localeDefaults, localeStrings, opts, pivotData, result, x;
+      var defaults, e, localeDefaults, localeStrings, opts, pivotData, ref, result, x;
       if (locales[locale] == null) {
         locale = "en";
       }
@@ -1669,7 +1669,7 @@
       localeDefaults = {
         rendererOptions: {
           localeSettings: localeStrings,
-          labels: {},
+          labels: (ref = inputOpts.labels) != null ? ref : {},
           table: {
             virtualization: {
               enabled: false
@@ -1703,7 +1703,7 @@
             x.pivotDataInstance = pivotData;
             // Wait for async data processing to complete
             checkDataReady = () => {
-              var e, func, isTableRenderer, name, ref, ref1, rendererFunction, rendererName;
+              var e, func, isTableRenderer, name, ref1, ref2, rendererFunction, rendererName;
               if (pivotData.dataReady || pivotData.aborted) {
                 if (pivotData.aborted) {
                   reject(new Error("Processing aborted"));
@@ -1717,12 +1717,12 @@
                   // If renderer is a string, resolve it to function
                   if (typeof opts.renderer === "string") {
                     rendererName = opts.renderer;
-                    rendererFunction = ((ref = opts.renderers) != null ? ref[opts.renderer] : void 0) || renderers[opts.renderer];
+                    rendererFunction = ((ref1 = opts.renderers) != null ? ref1[opts.renderer] : void 0) || renderers[opts.renderer];
                   } else if ($.isFunction(opts.renderer)) {
-                    ref1 = opts.renderers || renderers;
+                    ref2 = opts.renderers || renderers;
                     // Try to find the renderer name by comparing functions
-                    for (name in ref1) {
-                      func = ref1[name];
+                    for (name in ref2) {
+                      func = ref2[name];
                       if (func === opts.renderer) {
                         rendererName = name;
                         break;

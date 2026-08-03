@@ -1141,7 +1141,7 @@ callWithJQuery ($) ->
         localeDefaults =
             rendererOptions: {
                 localeSettings: localeStrings,
-                labels: {},
+                labels: inputOpts.labels ? {},
                 table: {
                     virtualization: {
                         enabled: false
